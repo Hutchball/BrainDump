@@ -1,13 +1,13 @@
 //
-//  ParkingLotV3UITestsLaunchTests.swift
-//  ParkingLotV3UITests
+//  BrainDumpUITestsLaunchTests.swift
+//  BrainDumpUITests
 //
 //  Created by Paul Hutchinson on 09/01/2026.
 //
 
 import XCTest
 
-final class ParkingLotV3UITestsLaunchTests: XCTestCase {
+final class BrainDumpUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
