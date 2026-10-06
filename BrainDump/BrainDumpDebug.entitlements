@@ -19,5 +19,9 @@
 	</array>
 	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
 	<string>$(TeamIdentifierPrefix)BonkersBonk.BrainDump</string>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.BonkersBonk.BrainDump</string>
+	</array>
 </dict>
 </plist>

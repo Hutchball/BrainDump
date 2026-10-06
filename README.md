@@ -1,47 +1,48 @@
 # BrainDump
 
-BrainDump is an iPhone and iPad productivity app for getting thoughts out of your head quickly and organising them later. Each thought is a coloured tile on an interactive sphere. The Brain button opens the unsorted Brain Dump category so users can clear their inbox by tagging or completing thoughts.
+BrainDump is a living brain for quickly capturing thoughts and organising them later. Thoughts remain square tiles in both the rotating sphere and the focused category view. Selecting a tile brings its category forward; long press turns the thought towards the user and opens a larger, readable tile.
 
-## Core experience
+## Current architecture
 
-- Drag to rotate the sphere with momentum; pinch to adjust its size.
-- Add a thought, tap a tile to enter its tag's focused list, and explicitly select Edit to change text.
-- Scroll the focused list to select a tile; swipe horizontally to cycle populated tags.
-- Use the default Brain Dump, Things to do, Movies to watch, Books to read, and Websites to check categories, plus up to 20 custom tags.
-- Complete thoughts into a restorable archive or delete them into Recently Deleted, purged after 30 days on launch.
-- Search active thought text, identify duplicates by normalised text and tag, customise backgrounds and haptics, and replay guided training.
-- Opt into a local nightly reminder at 20:30 when unsorted thoughts remain. Notification taps open the Brain Dump list.
+- `ContentView.swift`: sphere/category navigation, stable thought-ID selection, gestures, training, and settings integration. It reads records directly rather than maintaining parallel arrays of IDs, text, and categories.
+- `ThoughtModels.swift` / `ThoughtStore.swift`: local-first records, categories, attachments, archives, migration, and durable atomic JSON storage in Application Support. UserDefaults holds preferences; old thought defaults remain untouched as a migration recovery source.
+- `CloudSyncService.swift`: private CloudKit records with CKSyncEngine, pending changes and persisted engine state, attachment assets with unchanged-image fields left untouched, conflict recovery, and an explicit pause/resume path for iCloud account changes.
+- `TileViews.swift` / `CategoryHeader.swift`: readable square previews, independent fill/border colours, thumbnail loading, bounded category rows, and accessible category navigation. Native scroll alignment has one selection binding.
+- `ThoughtFocusView.swift` / `ThoughtDetailView.swift`: full text, image zoom, links, category selection, appearance overrides, editing, completion, and deletion. Concurrent editor saves preserve both versions.
+- `AttachmentStore.swift`: bounded photo file transfer, off-main ImageIO validation/downsampling, metadata removal, and safe filenames. Images are stored before records reference them.
+- `BrainDumpIntents.swift`: Siri and Shortcuts capture into the Brain Dump inbox.
+- `BrainDumpShare/` / `CaptureInbox.swift`: Share Sheet capture of text, images, and URLs via an App Group queue. The extension commits each job atomically; only the app writes its database. Stable job IDs prevent duplicate imports after a retry.
+- `BackupService.swift` / `BackupSettingsView.swift`: portable version-4 backups including images and appearance; older `.bdu`/`.bdp` JSON remains readable. Import validation precedes an atomic record/category commit.
+- `BackgroundViews.swift` / `SphereGeometry.swift` / `SphereTypes.swift`: decorative rendering and sphere mathematics. Animation stops when inactive or Reduce Motion requires it; Low Power Mode reduces animation work.
 
-## Implementation fundamentals
+The app supports iOS 18.6+, iPhone and iPad. There are no third-party dependencies. The repository retains its original GitHub name, ParkingLotV3.
 
-`BrainDumpApp.swift` launches `ContentView` and installs the notification delegate. `ContentView.swift` (7,258 lines at this baseline) contains the main state, gestures, sphere maths, persistence, backup operations, training, settings, and supporting views. It uses SwiftUI with UIKit bridges for document picking and keyboard handling, Combine for observation, QuartzCore for momentum, and CryptoKit for backup fingerprints. There are no third-party package dependencies in the project.
+## Behaviour
 
-Thoughts are held in parallel arrays of texts, tag IDs, and UUID strings, with a separate tile count. UserDefaults stores these arrays, tags, preferences, and JSON-encoded archives. `Item.swift` is a SwiftData template model; the running app does not configure a model container or use it for thought storage.
+Capture with +, the Share Sheet, Photos, web links, or the Add to Brain Dump Siri shortcut. Each thought can contain up to ten image/link attachments. Selected photos are bounded at 30 MB and 100 million pixels, converted to metadata-free PNG, and capped at 4096 pixels on their longest edge. Image zoom makes screenshot content readable. Photos are never added automatically from the library.
 
-The sphere distributes points using a golden-angle spiral, rotates them with quaternions, and projects them into SwiftUI tile positions. Momentum uses a CADisplayLink requesting 120 fps. Focused lists use LazyVStack, scroll selection, and depth effects. The Space background updates star shimmer every half second.
+Tile and border colours are independently customisable at device-default, category, and individual-thought levels. Category and individual settings sync; device defaults remain local. Text contrast is chosen automatically, previews respect Dynamic Type, and full text is available through long press or the accessible Open Thought action.
 
-Backups are version-3 JSON documents exported as `.bdu`; `.bdp` and legacy ParkingLot names remain recognised. Import can merge or replace data. iCloud Drive writes a latest backup and retains up to five timestamped backups, with a six-second debounce and utility-queue file operations. Explicit upload and restore decisions use content fingerprints and prompts. This is file backup, rather than a record-based CloudKit synchronisation engine. CSV export is exposed in the debug menu.
+The category browser retains tiles, stable selection, and a remembered position for each category. Completion moves a thought into the restorable archive. Deletion keeps it in Recently Deleted for 30 days; hidden tombstones remain for sync convergence. Search and duplicate tools remain available. Training uses temporary demo thoughts and never overwrites real captures.
 
-Training uses temporary demo data and snapshots existing user state for replay. Training edits are excluded from normal thought persistence. Finishing first-launch training creates six starter tiles.
+CloudKit handles record changes separately from recovery backups. Text conflicts are preserved as recovered thoughts. Files, retries, queued changes, and explicit account-switch handling are independent of the visible screen. Unsigned simulator builds run locally; signed-device cloud verification is required. See `CLOUDKIT_SETUP.md`.
 
-## Baseline review — 6 October 2026
+## Validation and remaining device checks
 
-The app target supports iOS 18.6 and later, on iPhone and iPad; test targets specify iOS 18.7. Some iOS 26 glass effects have availability guards. The GitHub repository retains its original `ParkingLotV3` name, while this snapshot records the local BrainDump rename.
+Meaningful tests cover legacy migration, archive/tombstone retention, corrupt database protection, edit conflicts, first saves, backup round trips and category collisions, invalid images and paths, and the Siri capture path. UI tests cover repeated category scrolling, long press/full-text/dismissal, and capturing a new thought into its category.
 
-Areas to review in subsequent work, without changing behaviour in this baseline:
+A Release iPhone compilation and simulator tests use Xcode 27.0 with signing disabled. These checks do not verify spoken Siri recognition, Share Sheet behaviour in Safari/Photos on a signed phone, actual iCloud delivery between devices, or battery consumption. Those require the signed-device checklist in `CLOUDKIT_SETUP.md`. Local JSON writes are synchronous for durability; large-library profiling remains necessary before claiming production performance.
 
-- Split the large view file and introduce a single thought model to avoid parallel-array and count inconsistencies.
-- Add meaningful coverage for persistence, import/restore, archives, training, and notification routing. Current unit coverage is a placeholder; UI tests launch the app and measure launch performance.
-- Audit VoiceOver labels, Dynamic Type, Reduce Motion, contrast, and gesture alternatives. Tiles currently use fixed sizing and fonts that shrink to 8 points.
-- Profile sphere rendering and repeated save operations; review background/inactive lifecycle handling and recurring animation callbacks. The scene-phase handler currently handles returning active but does not explicitly stop momentum on becoming inactive.
-- The debug CPU number is calculated from memory size plus randomness, so it is not a performance measurement.
-- Review cloud write coordination: routine automatic backups do not run the explicit upload conflict check. Review invalid import feedback and preservation of archives when active data is empty.
-- Recheck the filtered-list stacking and snapping issues recorded in the earlier `STATUS.md`; they have not been verified visually in this review.
+## Recovery checkpoints
 
-See `AGENTS.md` for development principles and official Apple and Swift references.
+The original working base is committed on `TrainingOnAppStartUp` and tagged `braindump-baseline-2026-10-06`. The rebuild lives on `codex/living-brain-rebuild`.
 
-Validation: Debug build for the generic iOS Simulator succeeded using Xcode 27.0 with code signing disabled. Xcode emitted only an App Intents metadata warning because the app has no AppIntents dependency. No simulator interaction, device testing, or functional test run was performed.
+To inspect the original without replacing this checkout:
 
-## Returning to this baseline
+```sh
+git worktree add ../BrainDump-baseline braindump-baseline-2026-10-06
+```
 
-The snapshot is on branch `TrainingOnAppStartUp`, tagged `braindump-baseline-2026-10-06`. For a separate recovery checkout, use `git worktree add ../BrainDump-baseline braindump-baseline-2026-10-06`. Git preserves project files, not thoughts stored on a device; export an app backup separately when those need protection.
+Git protects code and project assets. Export a BrainDump backup separately to protect device thoughts and attachments.
+
+See `AGENTS.md` for development principles and official references, and `STATUS.md` for current verification results.

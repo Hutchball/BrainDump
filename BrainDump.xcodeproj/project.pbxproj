@@ -6,6 +6,22 @@
 	objectVersion = 77;
 	objects = {
 
+        BD0000000000000000000001 /* BrainDumpShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = BrainDumpShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+        BD0000000000000000000002 /* Embed BrainDumpShare */ = {isa = PBXBuildFile; fileRef = BD0000000000000000000001; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+        BD0000000000000000000003 /* Embed App Extensions */ = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (BD0000000000000000000002, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+        BD0000000000000000000004 /* BrainDumpShare */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (BD0000000000000000000005, ); path = BrainDumpShare; sourceTree = "<group>"; };
+        BD0000000000000000000005 /* Extension exceptions */ = {isa = PBXFileSystemSynchronizedBuildFileExceptionSet; membershipExceptions = (Info.plist, BrainDumpShare.entitlements, ); target = BD0000000000000000000006; };
+        BD0000000000000000000006 /* BrainDumpShare */ = {isa = PBXNativeTarget; buildConfigurationList = BD0000000000000000000007; buildPhases = (BD0000000000000000000008, BD0000000000000000000009, BD000000000000000000000A, ); buildRules = (); dependencies = (); fileSystemSynchronizedGroups = (BD0000000000000000000004, ); name = BrainDumpShare; packageProductDependencies = (); productName = BrainDumpShare; productReference = BD0000000000000000000001; productType = "com.apple.product-type.app-extension"; };
+        BD0000000000000000000007 = {isa = XCConfigurationList; buildConfigurations = (BD000000000000000000000B, BD000000000000000000000C, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        BD0000000000000000000008 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        BD0000000000000000000009 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        BD000000000000000000000A = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        BD000000000000000000000B = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = BrainDumpShare/BrainDumpShare.entitlements; CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = 2F9CL2CR2R; CURRENT_PROJECT_VERSION = 0.95; MARKETING_VERSION = 0.1.0; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BrainDumpShare/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 18.6; PRODUCT_BUNDLE_IDENTIFIER = BonkersBonk.BrainDump.Share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_VERSION = 5.0; SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor; SWIFT_APPROACHABLE_CONCURRENCY = YES; TARGETED_DEVICE_FAMILY = "1,2"; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"; }; name = Debug; };
+        BD000000000000000000000C = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = BrainDumpShare/BrainDumpShare.entitlements; CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = 2F9CL2CR2R; CURRENT_PROJECT_VERSION = 0.95; MARKETING_VERSION = 0.1.0; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = BrainDumpShare/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 18.6; PRODUCT_BUNDLE_IDENTIFIER = BonkersBonk.BrainDump.Share; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_VERSION = 5.0; SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor; SWIFT_APPROACHABLE_CONCURRENCY = YES; TARGETED_DEVICE_FAMILY = "1,2"; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"; }; name = Release; };
+        BD000000000000000000000D = {isa = PBXContainerItemProxy; containerPortal = 51B32E842F11586400C9BB0E; proxyType = 1; remoteGlobalIDString = BD0000000000000000000006; remoteInfo = BrainDumpShare; };
+        BD000000000000000000000E = {isa = PBXTargetDependency; target = BD0000000000000000000006; targetProxy = BD000000000000000000000D; };
+
+
 /* Begin PBXContainerItemProxy section */
 		51B32E9E2F11586500C9BB0E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -89,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				51B32E8E2F11586400C9BB0E /* BrainDump */,
+                BD0000000000000000000004 /* BrainDumpShare */,
 				51B32EA02F11586500C9BB0E /* BrainDumpTests */,
 				51B32EAA2F11586500C9BB0E /* BrainDumpUITests */,
 				51B32E8D2F11586400C9BB0E /* Products */,
@@ -99,6 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				51B32E8C2F11586400C9BB0E /* BrainDump.app */,
+                BD0000000000000000000001 /* BrainDumpShare.appex */,
 				51B32E9D2F11586500C9BB0E /* BrainDumpTests.xctest */,
 				51B32EA72F11586500C9BB0E /* BrainDumpUITests.xctest */,
 			);
@@ -115,11 +133,11 @@
 				51B32E882F11586400C9BB0E /* Sources */,
 				51B32E892F11586400C9BB0E /* Frameworks */,
 				51B32E8A2F11586400C9BB0E /* Resources */,
+                BD0000000000000000000003 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
+			dependencies = (BD000000000000000000000E, );
 			fileSystemSynchronizedGroups = (
 				51B32E8E2F11586400C9BB0E /* BrainDump */,
 			);
@@ -213,7 +231,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				51B32E8B2F11586400C9BB0E /* BrainDump */,
+                BD0000000000000000000006 /* BrainDumpShare */,				51B32E8B2F11586400C9BB0E /* BrainDump */,
 				51B32E9C2F11586500C9BB0E /* BrainDumpTests */,
 				51B32EA62F11586500C9BB0E /* BrainDumpUITests */,
 			);

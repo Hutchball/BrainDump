@@ -35,9 +35,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 struct BrainDumpApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    @StateObject private var sync = CloudSyncService(store: .shared)
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(sync)
+                .task {
+                    guard !ProcessInfo.processInfo.arguments.contains("--living-brain-fixture"), ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+                    sync.start()
+                    _ = await CaptureInbox.shared.importPending()
+                }
         }
     }
 }

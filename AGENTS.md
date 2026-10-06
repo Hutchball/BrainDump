@@ -27,3 +27,14 @@ Protect saved thoughts and backup compatibility when changing persistence. Revie
 - [FileManager](https://developer.apple.com/documentation/foundation/filemanager)
 - [Testing](https://developer.apple.com/documentation/testing)
 - [XCTest](https://developer.apple.com/documentation/xctest)
+
+## Rebuild integration references
+
+- [App Intents](https://developer.apple.com/documentation/appintents)
+- [CKSyncEngine](https://developer.apple.com/documentation/cloudkit/cksyncengine-4b4w9)
+- [CKAsset](https://developer.apple.com/documentation/cloudkit/ckasset)
+- [PhotosPicker](https://developer.apple.com/documentation/photosui/photospicker)
+- [Core Transferable](https://developer.apple.com/documentation/coretransferable)
+- [Image I/O](https://developer.apple.com/documentation/imageio)
+
+Use the record store as the source of truth. Select thoughts by stable ID; do not reintroduce parallel mutable arrays or competing scroll snap drivers. Keep sync and portable backup separate. Check `CLOUDKIT_SETUP.md` before signed-device validation or distribution.
