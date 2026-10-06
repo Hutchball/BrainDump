@@ -98,9 +98,13 @@ enum Haptics {
 
     static func negativeDoubleTap() {
         guard isEnabled else { return }
-        let generator = UINotificationFeedbackGenerator()
+        let generator = UIImpactFeedbackGenerator(style: .rigid)
         generator.prepare()
-        generator.notificationOccurred(.error)
+        generator.impactOccurred(intensity: 0.55)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard isEnabled else { return }
+            generator.impactOccurred(intensity: 0.4)
+        }
     }
 }
 

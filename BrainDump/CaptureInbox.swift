@@ -23,6 +23,7 @@ final class CaptureInbox {
                 let images = job["images"] as? [String] ?? []
                 // Stable IDs make a retry after a crash idempotent.
                 if ThoughtStore.shared.thought(id: id) == nil {
+                    guard ThoughtStore.shared.canCreateThought else { throw ThoughtStore.ValidationError.freeLimitReached }
                     var attachments: [ThoughtAttachment] = []
                     for filename in images {
                         guard AttachmentStore.isSafeFilename(filename) else { throw InboxError.invalid }

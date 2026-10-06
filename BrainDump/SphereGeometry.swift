@@ -22,13 +22,16 @@ struct SphereMath {
         let goldenAngle = Double.pi * (3.0 - sqrt(5.0))
 
         // Normalized index (0 to 1)
-        let y = 1.0 - (Double(index) / Double(total - 1)) * 2.0
+        // SwiftUI may render a departing tile with its old slot and the new count
+        // before layout membership updates. Keep that intermediate geometry finite.
+        let slot = min(max(index, 0), total - 1)
+        let y = 1.0 - (Double(slot) / Double(total - 1)) * 2.0
 
         // Radius at this y level
-        let radius = sqrt(1.0 - y * y)
+        let radius = sqrt(max(0, 1.0 - y * y))
 
         // Angle around the sphere
-        let theta = goldenAngle * Double(index)
+        let theta = goldenAngle * Double(slot)
 
         // Convert to 3D coordinates
         let x = cos(theta) * radius

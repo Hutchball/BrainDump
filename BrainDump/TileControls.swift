@@ -34,7 +34,7 @@ struct GlassButton: View {
         switch icon {
         case "plus": return "Add thought"
         case "brain": return "Open Brain Dump"
-        case "gearshape": return "Settings"
+        case "gearshape", "gearshape.fill": return "Settings"
         case "magnifyingglass": return "Search thoughts"
         case "xmark": return "Close"
         case "trash": return "Delete thought"

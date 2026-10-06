@@ -9,6 +9,95 @@ struct ThoughtStoreTests {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         return (directory, UserDefaults(suiteName: name)!)
     }
+    @Test func environmentChangeRequeuesAcknowledgedLibraryWithoutChangingThoughts() throws {
+        let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ThoughtStore(directory: directory, defaults: defaults)
+        let captured = try store.capture(text: "Keep this thought")
+        let thought = try #require(store.thought(id: captured.id))
+        try store.prepareCloudSync(environment: "Development")
+        try store.acknowledge(id: thought.id, systemFields: Data([1]), sentModifiedAt: thought.modifiedAt)
+        try store.saveSyncState(Data([2]))
+        let original = store.thoughts
+        #expect(!store.pendingIDs.contains(thought.id))
+        try store.prepareCloudSync(environment: "Production")
+        #expect(store.thoughts == original)
+        #expect(store.pendingIDs.contains(thought.id))
+        #expect(store.syncState == nil)
+        #expect(store.cloudRecordData(id: thought.id) == nil)
+        #expect(store.pendingIDs.isSuperset(of: store.tags.map { "category:\($0.id)" }))
+        try store.acknowledge(id: thought.id, systemFields: Data([3]), sentModifiedAt: thought.modifiedAt)
+        try store.saveSyncState(Data([4]))
+        let reloaded = ThoughtStore(directory: directory, defaults: defaults)
+        try reloaded.prepareCloudSync(environment: "Production")
+        #expect(!reloaded.pendingIDs.contains(thought.id))
+        #expect(reloaded.syncState == Data([4]))
+        #expect(reloaded.thoughts == original)
+    }
+
+    @Test func legacySyncBaselineAndManualRecoveryPreserveArchivesAndTombstones() throws {
+        let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ThoughtStore(directory: directory, defaults: defaults)
+        var thought = try store.capture(text: "Archived")
+        thought.status = .deleted; thought.archivedAt = Date()
+        try store.update(thought)
+        thought = try #require(store.thought(id: thought.id))
+        try store.acknowledge(id: thought.id, systemFields: Data([1]), sentModifiedAt: thought.modifiedAt)
+        try store.prepareCloudSync(environment: "Production")
+        #expect(store.pendingIDs.contains(thought.id))
+        #expect(store.thought(id: thought.id) == thought)
+        try store.acknowledge(id: thought.id, systemFields: Data([1]), sentModifiedAt: thought.modifiedAt)
+        try store.prepareCloudSync(environment: "Production", force: true)
+        #expect(store.pendingIDs.contains(thought.id))
+        #expect(store.thought(id: thought.id) == thought)
+    }
+
+    @Test func syncRecoveryDoesNotBypassAccountPause() throws {
+        let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ThoughtStore(directory: directory, defaults: defaults)
+        try store.saveSyncState(Data([8]))
+        try store.pauseAccountSync()
+        try store.prepareCloudSync(environment: "Production", force: true)
+        #expect(store.accountSyncPaused)
+        #expect(store.syncState == Data([8]))
+    }
+
+    @Test func freeLimitProtectsExistingThoughtsAndProAllowsMore() throws {
+        let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ThoughtStore(directory: directory, defaults: defaults)
+        var pro = false
+        store.creationHasPro = { pro }
+        for index in 0..<25 { _ = try store.capture(text: "Thought \(index)") }
+        #expect(!store.canCreateThought)
+        #expect(throws: ThoughtStore.ValidationError.self) { try store.capture(text: "Over limit") }
+        var first = store.activeThoughts[0]
+        first.text = "Still editable"
+        try store.update(first)
+        #expect(store.thought(id: first.id)?.text == "Still editable")
+        first.status = .completed
+        try store.update(first)
+        #expect(store.canCreateThought)
+        _ = try store.capture(text: "Space reclaimed")
+        pro = true
+        _ = try store.capture(text: "Pro thought")
+        #expect(store.activeThoughts.count == 26)
+        pro = false
+        #expect(!store.canCreateThought)
+        #expect(store.activeThoughts.count == 26)
+    }
+
+    @Test func categoryColoursRespectExplicitAppearance() {
+        var category = ThoughtCategory(id: 3, name: "Things to do", color: "brown", isDefault: true)
+        let automatic = TilePalette.categoryFill(category, fallback: "E9E3FF")
+        #expect(automatic == TilePalette.hex(TagColor.brown.uiColor))
+        category.fillHex = "FFFFFF"
+        category.borderHex = "000000"
+        #expect(TilePalette.categoryFill(category, fallback: "E9E3FF") == "FFFFFF")
+        #expect(TilePalette.categoryBorder(category, fallback: "7565AB") == "000000")
+        category.id = 0; category.fillHex = nil; category.borderHex = nil
+        #expect(TilePalette.categoryFill(category, fallback: "E9E3FF") == "E9E3FF")
+        #expect(TilePalette.categoryBorder(category, fallback: "7565AB") == "7565AB")
+    }
+
     @Test func migratesLegacyAndPreservesDefaults() throws {
         let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
         defaults.set(["Remember milk"], forKey: "SavedTileTexts")
@@ -22,6 +111,63 @@ struct ThoughtStoreTests {
         #expect(defaults.stringArray(forKey: "SavedTileTexts") == ["Remember milk"])
         let reloaded = ThoughtStore(directory: directory, defaults: defaults)
         #expect(reloaded.thoughts == store.thoughts)
+    }
+    @Test func upgradePreservesLargeLibraryAndCustomCategoriesAcrossLaunches() throws {
+        let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let texts = (0..<80).map { "Existing tile \($0)" }
+        let ids = (0..<80).map { "legacy-\($0)" }
+        let assignments = (0..<80).map { $0.isMultiple(of: 2) ? 42 : 2 }
+        let categories = [Tag(id: 0, name: "Brain Dump", color: .grey, isDefault: true),
+                          Tag(id: 2, name: "My reading list", color: .purple, isDefault: true),
+                          Tag(id: 42, name: "Holiday plans", color: .coral, isDefault: false)]
+        defaults.set(texts, forKey: "SavedTileTexts")
+        defaults.set(ids, forKey: "SavedTileIds")
+        defaults.set(assignments, forKey: "SavedTileTags")
+        let categoryData = try JSONEncoder().encode(categories)
+        defaults.set(categoryData, forKey: "SavedTags")
+        let deleted = ArchivedTile(id: "deleted", text: "Removed", tagId: 42, archivedAt: Date())
+        defaults.set(try JSONEncoder().encode([deleted]), forKey: "DeletedTiles")
+        let migrated = ThoughtStore(directory: directory, defaults: defaults)
+        migrated.creationHasPro = { false }
+        #expect(migrated.storageError == nil)
+        #expect(migrated.activeThoughts.count == 80)
+        #expect(!migrated.canCreateThought)
+        for index in ids.indices {
+            #expect(migrated.thought(id: ids[index])?.text == texts[index])
+            #expect(migrated.thought(id: ids[index])?.tagId == assignments[index])
+        }
+        #expect(migrated.tags.map(\.id) == categories.map(\.id))
+        #expect(migrated.tags.map(\.name) == categories.map(\.name))
+        #expect(migrated.tags.map(\.color) == categories.map { $0.color.rawValue })
+        #expect(migrated.thought(id: "deleted")?.status == .deleted)
+        #expect(defaults.data(forKey: "SavedTags") == categoryData)
+        var edited = migrated.thought(id: ids[0])!; edited.text = "Edited after upgrade"
+        try migrated.update(edited)
+        let reopened = ThoughtStore(directory: directory, defaults: defaults)
+        #expect(reopened.thoughts == migrated.thoughts)
+        #expect(reopened.tags == migrated.tags)
+        #expect(reopened.pendingIDs == migrated.pendingIDs)
+    }
+    @Test func cloudZoneRecoveryRequeuesEntireLibraryWithoutChangingContent() throws {
+        let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ThoughtStore(directory: directory, defaults: defaults)
+        let record = try store.capture(text: "Keep category", tagId: 2)
+        try store.acknowledge(id: record.id, systemFields: Data([1]), sentModifiedAt: record.modifiedAt, attachmentSlots: ["image.png"])
+        let thoughts = store.thoughts, categories = store.tags
+        try store.requeueAllCloudRecords()
+        #expect(store.thoughts == thoughts)
+        #expect(store.tags == categories)
+        #expect(store.cloudRecordData(id: record.id) == nil)
+        #expect(store.cloudAttachmentSlots(id: record.id) == nil)
+        #expect(store.pendingIDs == Set(thoughts.map(\.id) + categories.map { "category:\($0.id)" }))
+        try store.pauseAccountSync()
+        let reopened = ThoughtStore(directory: directory, defaults: defaults)
+        #expect(reopened.accountSyncPaused)
+        #expect(reopened.thoughts == thoughts)
+        try reopened.resumeAccountSync()
+        #expect(!reopened.accountSyncPaused)
+        #expect(reopened.thoughts == thoughts)
+        #expect(reopened.tags == categories)
     }
     @Test func snapshotsRetainAttachmentsAndAppearance() throws {
         let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }

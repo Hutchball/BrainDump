@@ -22,6 +22,8 @@ struct BackupSettingsView: View {
             Section {
                 Text("Merging retains your current thoughts. Replacing moves thoughts absent from the backup to Recently Deleted. Both actions sync to your other devices.")
                     .font(.footnote).foregroundStyle(.secondary)
+                Text("Backups from earlier versions (.bdu or .bdp) can also be restored here. iCloud record sync does not automatically import older backup files; choose Restore backup to select a file from iCloud Drive.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Backups")

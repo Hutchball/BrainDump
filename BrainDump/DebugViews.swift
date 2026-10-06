@@ -21,29 +21,22 @@ struct DebugMenuView: View {
     @State private var showSpinDebug = UserDefaults.standard.bool(forKey: "ShowSpinDebug")
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.15),
-                        Color(red: 0.1, green: 0.05, blue: 0.2)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                Color(uiColor: .systemGroupedBackground)
+                    .ignoresSafeArea()
 
                 VStack(spacing: 24) {
                     // Debug Panel Toggle
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Debug Panel")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.primary)
 
                         HStack {
                             Text("Show Debug Panel")
                                 .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.9))
+                                .foregroundStyle(.primary)
 
                             Spacer()
 
@@ -72,17 +65,17 @@ struct DebugMenuView: View {
                         dismiss()
                     }) {
                         HStack {
-                            Image(systemName: "plus.circle.fill")
+                            Image(systemName: "plus.circle.fill").foregroundStyle(Color.secondary)
                                 .font(.system(size: 20))
-                            Text("Create 10 Test Tiles")
+                            Text("Create 100 Test Tiles")
                                 .font(.system(size: 16, weight: .semibold))
                         }
-                        .foregroundColor(.white)
+                        .foregroundStyle(Color.primary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.blue.opacity(0.6))
+                                .fill(Color(uiColor: .secondarySystemGroupedBackground))
                         )
                     }
                     .padding(.horizontal, 20)
@@ -91,12 +84,12 @@ struct DebugMenuView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Spin Debug")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.primary)
 
                         HStack {
                             Text("Show Spin Debug")
                                 .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.9))
+                                .foregroundStyle(.primary)
 
                             Spacer()
 
@@ -122,17 +115,17 @@ struct DebugMenuView: View {
                         BrainDumpNotificationManager.triggerAllDebugNotificationVariants()
                     }) {
                         HStack {
-                            Image(systemName: "bell.badge.waveform.fill")
+                            Image(systemName: "bell.badge.waveform.fill").foregroundStyle(Color.secondary)
                                 .font(.system(size: 20))
                             Text("Trigger All Notifications")
                                 .font(.system(size: 16, weight: .semibold))
                         }
-                        .foregroundColor(.white)
+                        .foregroundStyle(Color.primary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.orange.opacity(0.7))
+                                .fill(Color(uiColor: .secondarySystemGroupedBackground))
                         )
                     }
                     .padding(.horizontal, 20)
@@ -144,17 +137,17 @@ struct DebugMenuView: View {
                             showCSVExport = true
                         }) {
                             HStack {
-                                Image(systemName: "tablecells")
+                                Image(systemName: "tablecells").foregroundStyle(Color.secondary)
                                     .font(.system(size: 20))
                                 Text("Export CSV")
                                     .font(.system(size: 16, weight: .semibold))
                             }
-                            .foregroundColor(.white)
+                            .foregroundStyle(Color.primary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.green.opacity(0.6))
+                                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
                             )
                         }
                         .padding(.horizontal, 20)
@@ -171,14 +164,13 @@ struct DebugMenuView: View {
                         Haptics.optionTap()
                         dismiss()
                     }
-                    .foregroundColor(.white)
                 }
             }
             .fileExporter(
                 isPresented: $showCSVExport,
                 document: csvDocument,
                 contentType: .commaSeparatedText,
-                defaultFilename: "ParkingLotTiles.csv"
+                defaultFilename: "BrainDumpTiles.csv"
             ) { _ in }
         }
     }

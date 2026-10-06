@@ -1,0 +1,73 @@
+{
+  "identifier": "54C9B02E",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "6.99",
+      "familyShareable": false,
+      "internalID": "1000001",
+      "localizations": [
+        {
+          "description": "Unlimited active tiles with one purchase.",
+          "displayName": "BrainDump Pro Lifetime",
+          "locale": "en_GB"
+        }
+      ],
+      "productID": "BonkersBonk.BrainDump.pro.lifetime.v2",
+      "referenceName": "BrainDump Pro Lifetime",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {
+    "_applicationInternalID": "",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_locale": "en_GB",
+    "_storefront": "GBR",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [
+    {
+      "id": "2000001",
+      "localizations": [
+        {
+          "description": "Unlimited active tiles",
+          "displayName": "BrainDump Pro",
+          "locale": "en_GB"
+        }
+      ],
+      "name": "BrainDump Pro",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "2.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "1000002",
+          "introductoryOffer": {
+            "internalID": "3000001",
+            "paymentMode": "free",
+            "subscriptionPeriod": "P1M"
+          },
+          "localizations": [
+            {
+              "description": "Unlimited active tiles. One month free for eligible subscribers.",
+              "displayName": "BrainDump Pro Monthly",
+              "locale": "en_GB"
+            }
+          ],
+          "productID": "BonkersBonk.BrainDump.pro.monthly.v2",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "BrainDump Pro Monthly",
+          "subscriptionGroupID": "2000001",
+          "type": "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}

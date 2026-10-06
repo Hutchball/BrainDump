@@ -9,8 +9,13 @@ struct AddBrainDumpThoughtIntent: AppIntent {
     @Parameter(title: "Thought", requestValueDialog: "What would you like to add to Brain Dump?")
     var thought: String
 
+    static var parameterSummary: some ParameterSummary {
+        Summary("Add \(\.$thought) to BrainDump")
+    }
+
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        await ProStore.shared.refreshEntitlements()
         _ = try save(to: ThoughtStore.shared)
         return .result(dialog: "Added to your Brain Dump inbox.")
     }

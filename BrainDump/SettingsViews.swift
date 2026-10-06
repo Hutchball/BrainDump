@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 import Combine
 import UIKit
 import Foundation
@@ -21,6 +22,7 @@ struct SettingsView: View {
     let replaceBackupData: (Data) -> Void
     let exportCSVData: (() -> Data)?
     let searchTiles: (String) -> [TileSummary]
+    let onOpenSearchTile: (String) -> Void
     let duplicateGroups: () -> [DuplicateGroup]
     let removeDuplicates: () -> Int
     let onRestoreArchived: (ArchivedTile) -> Void
@@ -35,70 +37,40 @@ struct SettingsView: View {
     @Binding var showDebugPanel: Bool
     let onCreateTestTiles: () -> Void
     #endif
-    @State private var showTagsView = false
+    @State private var showCategoriesView = false
     @State private var showOptionsView = false
 
+    @State private var showPro = false
+    @State private var showAbout = false
+
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Tap-to-dismiss background
-                Color.black.opacity(0.4)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        dismissSettings()
+        NavigationStack {
+            List {
+                Section {
+                    Button { showPro = true } label: {
+                        Label("Meet BrainDump Pro", systemImage: "sparkles").labelStyle(SettingsLabelStyle())
                     }
-
-                // Settings content (slides up from bottom)
-                VStack {
-                    Spacer()
-
-                    VStack(spacing: 20) {
-                        // Drag indicator
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.white.opacity(0.3))
-                            .frame(width: 40, height: 5)
-                            .padding(.top, 10)
-
-                        // Header
-                        HStack {
-                            Text("Settings")
-                                .font(.system(size: 28, weight: .bold))
-                                .foregroundColor(.white)
-
-                            Spacer()
-
-                            Button(action: {
-                                Haptics.optionTap()
-                                dismissSettings()
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                        }
-                        .padding(.horizontal, 20)
-
-                        // Settings content
-                        VStack(spacing: 16) {
-                            SettingsRow(
-                                icon: "tag.fill",
-                                title: "Tags",
-                                action: {
-                                    showTagsView = true
-                                }
-                            )
-                            SettingsRow(
-                                icon: "slider.horizontal.3",
-                                title: "Options",
-                                action: {
-                                    showOptionsView = true
-                                }
-                            )
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 40)
-                        .sheet(isPresented: $showTagsView) {
-                            TagsView(
+                }
+                Section {
+                    Button { showCategoriesView = true } label: { Label("Categories", systemImage: "tag.fill").labelStyle(SettingsLabelStyle()) }
+                    Button { showOptionsView = true } label: { Label("Options", systemImage: "slider.horizontal.3").labelStyle(SettingsLabelStyle()) }
+                }
+                Section {
+                    Button { showAbout = true } label: { Label("About & Privacy", systemImage: "info.circle").labelStyle(SettingsLabelStyle()) }
+                    Link(destination: URL(string: "mailto:braindumpfeedback@cakesquared.co.uk")!) {
+                        Label("Send Feedback", systemImage: "envelope").labelStyle(SettingsLabelStyle())
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: dismissSettings).accessibilityIdentifier("settings-done")
+                }
+            }
+                        .sheet(isPresented: $showCategoriesView) {
+                            CategoriesView(
                                 tagManager: tagManager,
                                 tileTags: $tileTags
                             )
@@ -123,6 +95,7 @@ struct SettingsView: View {
                                 onCreateTestTiles: onCreateTestTiles,
                                 exportCSVData: exportCSVData,
                                 searchTiles: searchTiles,
+                                onOpenSearchTile: onOpenSearchTile,
                                 duplicateGroups: duplicateGroups,
                                 removeDuplicates: removeDuplicates,
                                 completedTiles: $completedTiles,
@@ -175,6 +148,7 @@ struct SettingsView: View {
                                 },
                                 exportCSVData: exportCSVData,
                                 searchTiles: searchTiles,
+                                onOpenSearchTile: onOpenSearchTile,
                                 duplicateGroups: duplicateGroups,
                                 removeDuplicates: removeDuplicates,
                                 completedTiles: $completedTiles,
@@ -212,26 +186,10 @@ struct SettingsView: View {
                             )
 #endif
                         }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 20)
-                    .background(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.05, green: 0.05, blue: 0.15),
-                                Color(red: 0.1, green: 0.05, blue: 0.2)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .cornerRadius(20, corners: [.topLeft, .topRight])
-                    .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: -5)
-                }
-            }
+            .sheet(isPresented: $showPro) { ProPurchaseView() }
+            .sheet(isPresented: $showAbout) { AboutView() }
         }
-        .zIndex(3000) // Above everything
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
     }
 
     private func dismissSettings() {
@@ -282,8 +240,10 @@ extension View {
     func adaptiveLiquidPanel(cornerRadius: CGFloat = 12) -> some View {
         if #available(iOS 26.0, *) {
             self
-                .background(Color.clear)
+                .background(Color(uiColor: .secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .glassEffect(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         } else {
             self
                 .background(
@@ -330,6 +290,16 @@ struct RoundedCorner: Shape {
     }
 }
 
+/// Keep settings symbols neutral even inside tinted buttons and toggles.
+struct SettingsLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            configuration.icon.foregroundStyle(Color.secondary)
+            configuration.title.foregroundStyle(Color.primary)
+        }
+    }
+}
+
 // MARK: - Settings Row
 
 struct SettingsRow: View {
@@ -345,18 +315,18 @@ struct SettingsRow: View {
             HStack {
                 Image(systemName: icon)
                     .font(.system(size: 18))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundStyle(Color.secondary)
                     .frame(width: 30)
 
                 Text(title)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white)
+                    .foregroundStyle(Color.primary)
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundStyle(Color.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -377,12 +347,12 @@ struct HapticsRow: View {
         HStack {
             Image(systemName: "hand.tap.fill")
                 .font(.system(size: 18))
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundStyle(Color.secondary)
                 .frame(width: 30)
 
             Text("Haptics")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundStyle(Color.primary)
 
             Spacer()
 
@@ -405,16 +375,16 @@ struct DisabledSettingsRow: View {
         HStack {
             Image(systemName: icon)
                 .font(.system(size: 18))
-                .foregroundColor(.white.opacity(0.35))
+                .foregroundStyle(Color.secondary)
                 .frame(width: 30)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundStyle(Color.secondary)
                 Text(detail)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.45))
+                    .foregroundStyle(Color.secondary)
             }
 
             Spacer()
@@ -435,12 +405,12 @@ struct NotificationsRow: View {
         HStack {
             Image(systemName: "bell.fill")
                 .font(.system(size: 18))
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundStyle(Color.secondary)
                 .frame(width: 30)
 
             Text("Notifications")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundStyle(Color.primary)
 
             Spacer()
 
@@ -478,18 +448,18 @@ struct AboutRow: View {
         HStack {
             Image(systemName: icon)
                 .font(.system(size: 18))
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundStyle(Color.secondary)
                 .frame(width: 30)
 
             Text(title)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundStyle(Color.primary)
 
             Spacer()
 
             Text(value)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.75))
+                .foregroundStyle(Color.secondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -498,6 +468,9 @@ struct AboutRow: View {
 }
 
 struct AppearanceView: View {
+    @AppStorage("SphereEdgeBlurEnabled") private var sphereEdgeBlurEnabled = true
+    @AppStorage("TileLightingEnabled") private var tileLightingEnabled = true
+    @AppStorage("TileSheenEnabled") private var tileSheenEnabled = true
     @AppStorage("BackgroundTheme") private var backgroundThemeRaw: String = BackgroundTheme.space.rawValue
     @Environment(\.dismiss) private var dismiss
     @State private var showTileAppearance = false
@@ -507,21 +480,13 @@ struct AppearanceView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.15),
-                        Color(red: 0.1, green: 0.05, blue: 0.2)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                Color(uiColor: .systemGroupedBackground)
+                    .ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 12) {
-                        SettingsRow(icon: "paintpalette.fill", title: "Tile and border colours", action: { showTileAppearance = true })
                         ForEach(BackgroundTheme.allCases) { theme in
                             Button(action: {
                                 Haptics.optionTap()
@@ -539,31 +504,62 @@ struct AppearanceView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(theme.title)
                                             .font(.system(size: 16, weight: .semibold))
-                                            .foregroundColor(.white)
+                                            .foregroundStyle(.primary)
                                         Text(theme.subtitle)
                                             .font(.system(size: 12, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
+                                            .foregroundStyle(.secondary)
                                     }
 
                                     Spacer()
 
                                     Image(systemName: selectedTheme == theme ? "checkmark.circle.fill" : "circle")
                                         .font(.system(size: 20, weight: .semibold))
-                                        .foregroundColor(selectedTheme == theme ? .green : .white.opacity(0.5))
+                                        .foregroundColor(selectedTheme == theme ? .green : .secondary)
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(.ultraThinMaterial)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.gray.opacity(0.15))
-                                        )
-                                )
+                                .adaptiveLiquidPanel(cornerRadius: 12)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
+                        SettingsRow(icon: "paintpalette.fill", title: "Tile and border colours", action: { showTileAppearance = true })
+                        Toggle(isOn: $sphereEdgeBlurEnabled) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Sphere edge blur").font(.headline)
+                                Text("Gently softens the sphere’s outer edge as you resize it.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityIdentifier("sphere-edge-blur-toggle")
+                        .foregroundStyle(.primary)
+                        .tint(.green)
+                        .padding(16)
+                        .adaptiveLiquidPanel(cornerRadius: 12)
+                        Toggle(isOn: $tileSheenEnabled) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Tile sheen & gradient").font(.headline)
+                                Text("A subtle, static highlight on tiles.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityIdentifier("tile-sheen-toggle")
+                        .foregroundStyle(.primary)
+                        .tint(.green)
+                        .padding(16)
+                        .adaptiveLiquidPanel(cornerRadius: 12)
+                        Toggle(isOn: $tileLightingEnabled) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Top-right lighting").font(.headline)
+                                Text("Soft light from just above the screen.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityIdentifier("tile-lighting-toggle")
+                        .foregroundStyle(.primary)
+                        .tint(.green)
+                        .padding(16)
+                        .adaptiveLiquidPanel(cornerRadius: 12)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
@@ -578,113 +574,90 @@ struct AppearanceView: View {
                         Haptics.optionTap()
                         dismiss()
                     }
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
                 }
             }
         }
     }
 }
 
-// MARK: - Tags View
+// MARK: - Categories View
 
-struct TagsView: View {
+struct CategoriesView: View {
     @ObservedObject var tagManager: TagManager
     @Binding var tileTags: [Int]
     @Environment(\.dismiss) private var dismiss
-
+    @State private var pendingDeletion: Tag?
     @State private var showCreateTag = false
     @State private var newTagName = ""
     @State private var selectedColor: TagColor = .coral
 
-    let availableColors: [TagColor] = TagColor.orderedPalette
-
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.15),
-                        Color(red: 0.1, green: 0.05, blue: 0.2)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Default tags section
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Default Tags")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 20)
-
-                            ForEach(tagManager.defaultTagsInDisplayOrder) { tag in
-                                TagRow(tag: tag, isDefault: true)
-                            }
-                        }
-                        .padding(.top, 20)
-
-                        // User tags section
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Your Tags")
-                                    .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(.white)
-
-                                Spacer()
-
-                                if tagManager.canAddMoreUserTags {
-                                    Button(action: {
+        NavigationStack {
+            List {
+                Section("Default Categories") {
+                    ForEach(tagManager.defaultTagsInDisplayOrder) { tag in
+                        CategoryRow(tag: tag, isDefault: true)
+                    }
+                }
+                Section {
+                    if tagManager.userTags.isEmpty {
+                        Text("No custom categories yet").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(tagManager.userTags) { tag in
+                            CategoryRow(tag: tag, isDefault: false)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
                                         Haptics.optionTap()
-                                        showCreateTag = true
-                                    }) {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.system(size: 24))
-                                            .foregroundColor(.white)
+                                        pendingDeletion = tag
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
                                     }
                                 }
-                            }
-                            .padding(.horizontal, 20)
-
-                            if tagManager.userTags.isEmpty {
-                                Text("No custom tags yet")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .padding(.horizontal, 20)
-                            } else {
-                                ForEach(tagManager.userTags) { tag in
-                                    TagRow(tag: tag, isDefault: false, onDelete: {
-                                        tagManager.deleteUserTag(tag)
-                                    })
-                                }
-                            }
                         }
-                        .padding(.top, 10)
+                    }
+                } header: {
+                    HStack {
+                        Text("Your Categories")
+                        Spacer()
+                        if tagManager.canAddMoreUserTags {
+                            Button { showCreateTag = true } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(Color.secondary)
+                                    .font(.title2)
+                                    .frame(minWidth: 44, minHeight: 44)
+                            }
+                            .accessibilityLabel("New category")
+                        }
                     }
                 }
             }
-            .navigationTitle("Tags")
+            .listStyle(.insetGrouped)
+            .alert("Delete category?", isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }
+            ), presenting: pendingDeletion) { tag in
+                Button("Delete", role: .destructive) {
+                    tagManager.deleteUserTag(tag)
+                    pendingDeletion = nil
+                }
+                Button("Cancel", role: .cancel) { pendingDeletion = nil }
+            } message: { tag in
+                Text("Are you sure you want to delete \(tag.name)? Its tiles will move to Unsorted.")
+            }
+            .navigationTitle("Categories")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        Haptics.optionTap()
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
-                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
             .sheet(isPresented: $showCreateTag) {
-                CreateTagView(
-                    tagManager: tagManager,
-                    newTagName: $newTagName,
-                    selectedColor: $selectedColor,
-                    availableColors: availableColors
-                )
+                CreateCategoryView(tagManager: tagManager, newTagName: $newTagName,
+                                   selectedColor: $selectedColor, availableColors: TagColor.orderedPalette)
             }
+            .alert("Category could not be saved", isPresented: Binding(
+                get: { !showCreateTag && tagManager.saveError != nil }, set: { if !$0 { tagManager.saveError = nil } })) {
+                Button("OK") { tagManager.saveError = nil }
+            } message: { Text(tagManager.saveError ?? "Please try again.") }
         }
     }
 }
@@ -701,6 +674,7 @@ struct OptionsView: View {
     let onCreateTestTiles: (() -> Void)?
     let exportCSVData: (() -> Data)?
     let searchTiles: (String) -> [TileSummary]
+    let onOpenSearchTile: (String) -> Void
     let duplicateGroups: () -> [DuplicateGroup]
     let removeDuplicates: () -> Int
     @Binding var completedTiles: [ArchivedTile]
@@ -716,8 +690,10 @@ struct OptionsView: View {
     let isTrainingMode: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var showAppearance = false
-    @State private var showBackup = false
     @State private var showAdvanced = false
+    @State private var showAbout = false
+    @AppStorage("HapticsEnabled") private var hapticsEnabled = true
+    @AppStorage("BrainDumpNotificationsEnabled") private var notificationsEnabled = false
     @State private var showSearch = false
     @State private var showCompleted = false
     @State private var showDeleted = false
@@ -731,6 +707,7 @@ struct OptionsView: View {
         onCreateTestTiles: (() -> Void)? = nil,
         exportCSVData: (() -> Data)? = nil,
         searchTiles: @escaping (String) -> [TileSummary],
+        onOpenSearchTile: @escaping (String) -> Void,
         duplicateGroups: @escaping () -> [DuplicateGroup],
         removeDuplicates: @escaping () -> Int,
         completedTiles: Binding<[ArchivedTile]>,
@@ -754,6 +731,7 @@ struct OptionsView: View {
         self.onCreateTestTiles = onCreateTestTiles
         self.exportCSVData = exportCSVData
         self.searchTiles = searchTiles
+        self.onOpenSearchTile = onOpenSearchTile
         self.duplicateGroups = duplicateGroups
         self.removeDuplicates = removeDuplicates
         _completedTiles = completedTiles
@@ -770,8 +748,27 @@ struct OptionsView: View {
         self.isTrainingMode = isTrainingMode
     }
 
+    private func optionButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.optionTap()
+            action()
+        } label: {
+            HStack {
+                Label(title, systemImage: icon)
+                    .labelStyle(SettingsLabelStyle())
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     colors: [
@@ -783,86 +780,46 @@ struct OptionsView: View {
                 )
                 .ignoresSafeArea()
 
-                VStack(spacing: 16) {
-                    SettingsRow(
-                        icon: "paintbrush.fill",
-                        title: "Appearance",
-                        action: {
-                            Haptics.optionTap()
-                            showAppearance = true
-                        }
-                    )
-                    HapticsRow()
-                    NotificationsRow(
-                        onEnable: onEnableNotifications,
-                        onDisable: onDisableNotifications
-                    )
-                    if isTrainingMode {
-                        DisabledSettingsRow(
-                            icon: "externaldrive.badge.icloud",
-                            title: "Back-Up",
-                            detail: "Unavailable during training demo"
-                        )
-                    } else {
-                        SettingsRow(
-                            icon: "externaldrive.badge.icloud",
-                            title: "Back-Up",
-                            action: {
-                                Haptics.optionTap()
-                                showBackup = true
-                            }
-                        )
+                List {
+                    Section {
+                        optionButton("Search", icon: "magnifyingglass") { showSearch = true }
+                        optionButton("Recently Completed", icon: "checkmark.circle") { showCompleted = true }
+                        optionButton("Recently Deleted", icon: "trash") { showDeleted = true }
                     }
-                    SettingsRow(
-                        icon: "graduationcap.fill",
-                        title: "Replay Training Demo",
-                        action: {
-                            Haptics.optionTap()
-                            onReplayTrainingDemo()
-                            dismiss()
+                    Section {
+                        optionButton("Appearance", icon: "paintbrush.fill") { showAppearance = true }
+                        Toggle(isOn: $hapticsEnabled) {
+                            Label {
+                                Text("Haptics").foregroundStyle(Color.primary)
+                            } icon: {
+                                Image(systemName: "hand.tap.fill").foregroundStyle(Color.secondary)
+                            }
                         }
-                    )
-                    SettingsRow(
-                        icon: "gearshape.fill",
-                        title: "Advanced",
-                        action: {
-                            Haptics.optionTap()
-                            showAdvanced = true
+                        Toggle(isOn: Binding(
+                            get: { notificationsEnabled },
+                            set: { enabled in
+                                notificationsEnabled = enabled
+                                if enabled { onEnableNotifications() } else { onDisableNotifications() }
+                            }
+                        )) {
+                            Label {
+                                Text("Notifications").foregroundStyle(Color.primary)
+                            } icon: {
+                                Image(systemName: "bell.fill").foregroundStyle(Color.secondary)
+                            }
                         }
-                    )
-                    SettingsRow(
-                        icon: "magnifyingglass",
-                        title: "Search",
-                        action: {
-                            Haptics.optionTap()
-                            showSearch = true
-                        }
-                    )
-                    SettingsRow(
-                        icon: "checkmark.circle",
-                        title: "Recently Completed",
-                        action: {
-                            Haptics.optionTap()
-                            showCompleted = true
-                        }
-                    )
-                    SettingsRow(
-                        icon: "trash",
-                        title: "Recently Deleted",
-                        action: {
-                            Haptics.optionTap()
-                            showDeleted = true
-                        }
-                    )
-                    Spacer()
+                    }
+                    Section {
+                        optionButton("Advanced", icon: "gearshape.fill") { showAdvanced = true }
+                        optionButton("About", icon: "info.circle.fill") { showAbout = true }
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
+                .listStyle(.insetGrouped)
+                .sheet(isPresented: $showAbout) {
+                    AboutView()
+                }
                 .sheet(isPresented: $showAppearance) {
                     AppearanceView()
-                }
-                .sheet(isPresented: $showBackup) {
-                    SyncSettingsView()
                 }
                 .sheet(isPresented: $showAdvanced) {
                     AdvancedView(
@@ -870,6 +827,11 @@ struct OptionsView: View {
                             onResetApp()
                             dismiss()
                         },
+                        onReplayTrainingDemo: {
+                            onReplayTrainingDemo()
+                            dismiss()
+                        },
+                        isTrainingMode: isTrainingMode,
                         showDebugPanel: showDebugPanel,
                         onCreateTestTiles: onCreateTestTiles,
                         exportCSVData: exportCSVData
@@ -877,7 +839,8 @@ struct OptionsView: View {
                 }
                 .sheet(isPresented: $showSearch) {
                     TileSearchView(
-                        searchTiles: searchTiles
+                        searchTiles: searchTiles,
+                        onOpenSearchTile: onOpenSearchTile
                     )
                 }
                 .sheet(isPresented: $showCompleted) {
@@ -906,7 +869,6 @@ struct OptionsView: View {
                         Haptics.optionTap()
                         dismiss()
                     }
-                    .foregroundColor(.white)
                 }
             }
         }
@@ -917,64 +879,67 @@ struct OptionsView: View {
 
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
-
-    private var appName: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? "App"
-    }
-
-    private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
-    }
-
-    private var build: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-    }
+    private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0" }
+    private var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1" }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.15),
-                        Color(red: 0.1, green: 0.05, blue: 0.2)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                    VStack(spacing: 16) {
-                        VStack(spacing: 6) {
-                            Text(appName)
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
-                            Text("Version \(version) (\(build))")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.75))
-                        }
-                        .padding(.top, 20)
-
-                    AboutRow(icon: "info.circle.fill", title: "Version", value: version)
-                    AboutRow(icon: "number.circle.fill", title: "Build", value: build)
-
-                    Spacer()
+        NavigationStack {
+            Form {
+                Section {
+                    Text("BrainDump").font(.title2.bold())
+                    Text("Capture now. Organise later.").foregroundStyle(.secondary)
+                    LabeledContent("Version", value: version)
+                    LabeledContent("Build", value: build)
                 }
-                .padding(.horizontal, 20)
-            }
-            .navigationTitle("About")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        Haptics.optionTap()
-                        dismiss()
+                Section("Privacy") {
+                    Link("Privacy Policy", destination: URL(string: "https://cakesquared.co.uk/privacy-policy.html")!)
+                    NavigationLink("How BrainDump handles your data") { BrainDumpPrivacyView() }
+                }
+                Section("Links") {
+                    Link("CakeSquared Website", destination: URL(string: "https://cakesquared.co.uk")!)
+                }
+                Section("Contact") {
+                    Link(destination: URL(string: "mailto:braindumpfeedback@cakesquared.co.uk")!) {
+                        Label("Send Feedback", systemImage: "envelope")
                     }
-                    .foregroundColor(.white)
+                    Text("braindumpfeedback@cakesquared.co.uk").font(.footnote).textSelection(.enabled)
                 }
+                Section {
+                    Text("© \(Calendar.current.component(.year, from: Date()).formatted(.number.grouping(.never))) BrainDump")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("About & Privacy")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+
+struct BrainDumpPrivacyView: View {
+    var body: some View {
+        Form {
+            Section("Your thoughts") {
+                Text("BrainDump stores thoughts and attachments on your device. Its iCloud sync uses your private CloudKit database to synchronise supported data between your devices.")
+            }
+            Section("Photos and shared content") {
+                Text("You choose which photos, screenshots, links and text to add. Photos are not imported automatically. Imported images are processed to remove metadata.")
+            }
+            Section("Backups and exports") {
+                Text("Exported backups can contain your thoughts and attachments. You choose where to save or share them.")
+            }
+            Section("Notifications") {
+                Text("Nightly reminders require your permission and can be turned off in Settings.")
+            }
+            Section("Privacy Policy") {
+                Link("Read the Privacy Policy", destination: URL(string: "https://cakesquared.co.uk/privacy-policy.html")!)
+            }
+            Section("Contact") {
+                Link("braindumpfeedback@cakesquared.co.uk", destination: URL(string: "mailto:braindumpfeedback@cakesquared.co.uk")!)
             }
         }
+        .navigationTitle("Privacy")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -982,59 +947,54 @@ struct AboutView: View {
 
 struct AdvancedView: View {
     let onResetApp: () -> Void
+    let onReplayTrainingDemo: () -> Void
+    let isTrainingMode: Bool
     let showDebugPanel: Binding<Bool>?
     let onCreateTestTiles: (() -> Void)?
     let exportCSVData: (() -> Data)?
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
+    @State private var showBackup = false
     @State private var showResetConfirmation = false
-    @State private var showAbout = false
     #if DEBUG
     @State private var showDebugMenu = false
     #endif
 
     init(
         onResetApp: @escaping () -> Void,
+        onReplayTrainingDemo: @escaping () -> Void,
+        isTrainingMode: Bool,
         showDebugPanel: Binding<Bool>? = nil,
         onCreateTestTiles: (() -> Void)? = nil,
         exportCSVData: (() -> Data)? = nil
     ) {
         self.onResetApp = onResetApp
+        self.onReplayTrainingDemo = onReplayTrainingDemo
+        self.isTrainingMode = isTrainingMode
         self.showDebugPanel = showDebugPanel
         self.onCreateTestTiles = onCreateTestTiles
         self.exportCSVData = exportCSVData
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.15),
-                        Color(red: 0.1, green: 0.05, blue: 0.2)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                Color(uiColor: .systemGroupedBackground)
+                    .ignoresSafeArea()
 
                 VStack(spacing: 16) {
+                    if isTrainingMode {
+                        DisabledSettingsRow(icon: "externaldrive.badge.icloud", title: "Back-Up", detail: "Unavailable during training demo")
+                    } else {
+                        SettingsRow(icon: "externaldrive.badge.icloud", title: "Back-Up", action: { showBackup = true })
+                    }
+
                     SettingsRow(
-                        icon: "info.circle.fill",
-                        title: "About",
+                        icon: "graduationcap.fill",
+                        title: "Replay Training Demo",
                         action: {
                             Haptics.optionTap()
-                            showAbout = true
-                        }
-                    )
-                    SettingsRow(
-                        icon: "envelope.fill",
-                        title: "Contact (Email Me)",
-                        action: {
-                            Haptics.optionTap()
-                            if let emailURL = URL(string: "mailto:paulhutch77@gmail.com") {
-                                openURL(emailURL)
-                            }
+                            onReplayTrainingDemo()
+                            dismiss()
                         }
                     )
 
@@ -1064,6 +1024,9 @@ struct AdvancedView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
+                .sheet(isPresented: $showBackup) {
+                    SyncSettingsView()
+                }
                 .overlay {
                     if showResetConfirmation {
                         ResetConfirmationView(
@@ -1074,9 +1037,6 @@ struct AdvancedView: View {
                             }
                         )
                     }
-                }
-                .sheet(isPresented: $showAbout) {
-                    AboutView()
                 }
                 #if DEBUG
                 .sheet(isPresented: $showDebugMenu) {
@@ -1098,219 +1058,133 @@ struct AdvancedView: View {
                         Haptics.optionTap()
                         dismiss()
                     }
-                    .foregroundColor(.white)
                 }
             }
         }
     }
 }
 
-// MARK: - Tag Row
+// MARK: - Category Row
 
-struct TagRow: View {
+struct CategoryRow: View {
     let tag: Tag
     let isDefault: Bool
-    var onDelete: (() -> Void)? = nil
+    @ObservedObject private var store = ThoughtStore.shared
+    @AppStorage("DefaultTileFillHex") private var defaultFill = "E9E3FF"
+    @AppStorage("DefaultTileBorderHex") private var defaultBorder = "3C315C"
 
     var body: some View {
-        HStack {
-            // Color indicator
+        let category = store.tags.first { $0.id == tag.id }
+        HStack(spacing: 14) {
             Circle()
-                .fill(tag.uiColor)
-                .frame(width: 20, height: 20)
-
-            Text(tag.name)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white)
-
-            Spacer()
-
-            if !isDefault, let onDelete = onDelete {
-                Button(action: {
-                    Haptics.optionTap()
-                    onDelete()
-                }) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14))
-                        .foregroundColor(.red.opacity(0.8))
+                .fill(TilePalette.color(TilePalette.categoryFill(category, fallback: defaultFill)))
+                .overlay {
+                    Circle().strokeBorder(TilePalette.color(TilePalette.categoryBorder(category, fallback: defaultBorder)), lineWidth: 4)
                 }
-            }
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
+            Text(tag.name).font(.body.weight(.medium)).foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .adaptiveLiquidPanel(cornerRadius: 12)
-        .padding(.horizontal, 20)
+        .frame(minHeight: 44)
     }
 }
 
-// MARK: - Create Tag View
+// MARK: - Create Category View
 
-struct CreateTagView: View {
+struct CreateCategoryView: View {
     @ObservedObject var tagManager: TagManager
     @Binding var newTagName: String
     @Binding var selectedColor: TagColor
     let availableColors: [TagColor]
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isFocused: Bool
+    @State private var fillHex = TilePalette.hex(TagColor.coral.uiColor)
+    @State private var borderHex = TilePalette.prominentBorder(TilePalette.hex(TagColor.coral.uiColor))
+    @State private var customBorder = false
 
-    private var colorRows: [[TagColor]] {
-        let rowSize = 7
-        return stride(from: 0, to: availableColors.count, by: rowSize).map { start in
-            let end = min(start + rowSize, availableColors.count)
-            return Array(availableColors[start..<end])
-        }
+    private var cleanName: String { newTagName.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var tileColour: Binding<Color> {
+        Binding(get: { TilePalette.color(fillHex) }, set: {
+            fillHex = TilePalette.hex($0)
+            if !customBorder { borderHex = TilePalette.prominentBorder(fillHex) }
+        })
     }
 
-    private var backgroundGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.05, green: 0.05, blue: 0.15),
-                Color(red: 0.1, green: 0.05, blue: 0.2)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-
-    private var tagNameSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Tag Name")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-
-            TextField("Enter tag name", text: $newTagName)
-                .textFieldStyle(.plain)
-                .font(.system(size: 18))
-                .foregroundColor(.white)
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.gray.opacity(0.15))
-                        )
-                )
-                .focused($isFocused)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-    }
-
-    private var colorSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Color")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-
-            colorGrid
-                .padding(.horizontal, 12)
-                .padding(.vertical, 14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.white.opacity(0.05))
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                )
-        }
-        .padding(.horizontal, 20)
-    }
-
-    private var colorGrid: some View {
-        VStack(alignment: .center, spacing: 12) {
-            ForEach(colorRows.indices, id: \.self) { rowIndex in
-                let rowColors = colorRows[rowIndex]
-                HStack(spacing: 8) {
-                    ForEach(rowColors, id: \.self) { color in
-                        colorButton(for: color)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .offset(x: rowIndex.isMultiple(of: 2) ? -6 : 6)
-            }
-        }
-    }
-
-    private func colorButton(for color: TagColor) -> some View {
-        let isSelected = selectedColor == color
-        return Button(action: {
-            Haptics.optionTap()
-            selectedColor = color
-        }) {
-            Circle()
-                .fill(color.uiColor.opacity(0.97))
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                )
-                .overlay(
-                    Circle()
-                        .stroke(Color.white, lineWidth: isSelected ? 3 : 0)
-                )
-                .scaleEffect(isSelected ? 1.12 : 1.0)
-                .shadow(
-                    color: color.uiColor.opacity(isSelected ? 0.55 : 0.25),
-                    radius: isSelected ? 8 : 3,
-                    x: 0,
-                    y: isSelected ? 4 : 2
-                )
-                .animation(.spring(response: 0.24, dampingFraction: 0.82), value: isSelected)
-        }
-        .buttonStyle(.plain)
+    private var borderColour: Binding<Color> {
+        Binding(get: { TilePalette.color(borderHex) }, set: {
+            borderHex = TilePalette.hex($0)
+            customBorder = true
+        })
     }
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                backgroundGradient
-                    .ignoresSafeArea()
-
-                VStack(spacing: 24) {
-                    tagNameSection
-                    colorSection
-
-                    Spacer()
+        NavigationStack {
+            Form {
+                Section("Category name") {
+                    TextField("Enter category name", text: $newTagName)
+                        .focused($isFocused).submitLabel(.done)
                 }
-            }
-            .navigationTitle("New Tag")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        Haptics.optionTap()
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Create") {
-                        Haptics.optionTap()
-                        if !newTagName.isEmpty {
-                            tagManager.addUserTag(name: newTagName, color: selectedColor)
-                            newTagName = ""
-                            selectedColor = .coral
-                            dismiss()
+                Section {
+                    ColorPicker("Tile colour", selection: tileColour, supportsOpacity: false)
+                    ColorPicker("Border colour", selection: borderColour, supportsOpacity: false)
+                    if customBorder {
+                        Button("Use darker automatic border") {
+                            customBorder = false
+                            borderHex = TilePalette.prominentBorder(fillHex)
                         }
                     }
-                    .foregroundColor(.white)
-                    .disabled(newTagName.isEmpty)
+                } header: {
+                    Text("Category colours")
+                } footer: {
+                    Text("The border follows your tile colour with a darker shade until you choose your own border colour.")
+                }
+                Section("Preview") {
+                    Text(cleanName.isEmpty ? "Your category" : cleanName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(TilePalette.foreground(fillHex))
+                        .multilineTextAlignment(.center)
+                        .padding(24).frame(maxWidth: .infinity, minHeight: 130)
+                        .background(TilePalette.color(fillHex), in: RoundedRectangle(cornerRadius: 18))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18)
+                                .strokeBorder(TilePalette.color(borderHex), lineWidth: 4)
+                        }
+                }
+            }
+            .navigationTitle("New Category").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        guard tagManager.addUserTag(name: cleanName, color: selectedColor,
+                                                   fillHex: fillHex, borderHex: borderHex) else { return }
+                        Haptics.optionTap()
+                        newTagName = ""; selectedColor = .coral
+                        dismiss()
+                    }.disabled(cleanName.isEmpty || !tagManager.canAddMoreUserTags)
                 }
             }
             .onAppear {
+                fillHex = TilePalette.hex(selectedColor.uiColor)
+                borderHex = TilePalette.prominentBorder(fillHex)
+                customBorder = false
                 isFocused = true
             }
+            .alert("Category could not be saved", isPresented: Binding(
+                get: { tagManager.saveError != nil }, set: { if !$0 { tagManager.saveError = nil } })) {
+                Button("OK") { tagManager.saveError = nil }
+            } message: { Text(tagManager.saveError ?? "Please try again.") }
         }
     }
 }
 
-// MARK: - Tag Picker View
+// MARK: - Category Picker View
 
-struct TagPickerView: View {
+struct CategoryPickerView: View {
     @ObservedObject var tagManager: TagManager
     @Binding var selectedTagId: Int
     let onDismiss: () -> Void
@@ -1334,7 +1208,7 @@ struct TagPickerView: View {
     }
 
     private var titleView: some View {
-        Text("Select Tag")
+        Text("Categorise thought")
             .font(.system(size: 18, weight: .bold))
             .foregroundColor(.white)
             .padding(.top, 16)
@@ -1346,7 +1220,7 @@ struct TagPickerView: View {
             : selectedTagId
     }
 
-    private var newTagButton: some View {
+    private var newCategoryChoiceButton: some View {
         Button(action: {
             Haptics.optionTap()
             showCreateTag = true
@@ -1355,7 +1229,7 @@ struct TagPickerView: View {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
-                Text("New Tag")
+                Text("New Category")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white)
             }
@@ -1386,7 +1260,7 @@ struct TagPickerView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(tagManager.tagsInDisplayOrder) { tag in
-                                TagButton(
+                                CategoryChoiceButton(
                                     tag: tag,
                                     isSelected: selectedTagId == tag.id,
                                     action: {
@@ -1396,7 +1270,7 @@ struct TagPickerView: View {
                                 )
                                 .id(tag.id)
                             }
-                            newTagButton
+                            newCategoryChoiceButton
                         }
                         .padding(.horizontal, 20)
                     }
@@ -1416,7 +1290,7 @@ struct TagPickerView: View {
         }
         .ignoresSafeArea(edges: .bottom)
         .sheet(isPresented: $showCreateTag) {
-            CreateTagView(
+            CreateCategoryView(
                 tagManager: tagManager,
                 newTagName: $newTagName,
                 selectedColor: $selectedColor,
@@ -1426,9 +1300,9 @@ struct TagPickerView: View {
     }
 }
 
-// MARK: - Tag Button
+// MARK: - Category Choice Button
 
-struct TagButton: View {
+struct CategoryChoiceButton: View {
     let tag: Tag
     let isSelected: Bool
     let action: () -> Void
@@ -1459,6 +1333,7 @@ struct TagButton: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("category-choice-\(tag.id)")
     }
 }
 
@@ -1469,6 +1344,7 @@ struct TileActionButtons: View {
         case tag
         case complete
         case add
+        case close
     }
 
     let onClose: () -> Void
@@ -1477,63 +1353,64 @@ struct TileActionButtons: View {
     let onComplete: () -> Void
     let onDelete: () -> Void
     let onAdd: () -> Void
-    let pulseTrigger: Bool
     let closeIcon: String
     let closeForegroundColor: Color
     let closeBorderColor: Color?
     let highlightedAction: HighlightedAction?
     let showFloatingAddButton: Bool
+    var trainingRestricted = false
 
     private let buttonSize: CGFloat = 50
     private let buttonSpacing: CGFloat = 12
-    @State private var isThrobbing = false
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(alignment: .trailing, spacing: 12) {
-                VStack(spacing: buttonSpacing) {
+            VStack(spacing: buttonSpacing) {
                     // Delete button (trash)
                     ActionButton(
                         icon: "trash",
                         action: onDelete,
                         isDestructive: true
                     )
+                    .disabled(trainingRestricted)
 
                     // Edit button (pencil)
                     ActionButton(
                         icon: "pencil",
-                        action: onEdit
+                        action: onEdit,
+                        foregroundColor: .yellow
                     )
+                    .disabled(trainingRestricted)
 
-                    // Change tag button (tag)
+                    // Change category button
                     ActionButton(
                         icon: "tag",
                         action: onChangeTag,
+                        foregroundColor: .orange,
                         isHighlighted: highlightedAction == .tag
                     )
+                    .disabled(trainingRestricted && highlightedAction != .tag)
 
                     // Complete button (checkmark)
                     ActionButton(
                         icon: "checkmark.circle",
                         action: onComplete,
-                        isHighlighted: highlightedAction == .complete
+                        foregroundColor: .green,
+                        isHighlighted: highlightedAction == .complete,
+                        iconSize: 28
                     )
+                    .disabled(trainingRestricted && highlightedAction != .complete)
 
                     // Close button (X)
                     ActionButton(
                         icon: closeIcon,
                         action: onClose,
-                        foregroundColor: closeForegroundColor,
-                        borderColor: closeBorderColor
+                        foregroundColor: closeIcon == "xmark" ? .gray : closeForegroundColor,
+                        borderColor: highlightedAction == .close ? .yellow : closeBorderColor
                     )
-                    .overlay(
-                        Circle()
-                            .stroke(Color.green.opacity(isThrobbing ? 0.9 : 0.0), lineWidth: isThrobbing ? 3 : 0)
-                            .scaleEffect(isThrobbing ? 1.25 : 1.0)
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: isThrobbing)
-                    )
+                    .disabled(trainingRestricted && highlightedAction != .close)
+
                 }
                 .padding(.vertical, 8)
                 .padding(.horizontal, 8)
@@ -1550,34 +1427,23 @@ struct TileActionButtons: View {
                         )
                 )
 
-                // Floating add button (kept separate from the main five-action capsule)
-                if showFloatingAddButton {
-                    GlassButton(
-                        icon: "plus",
-                        foregroundColor: highlightedAction == .add ? .green : .primary,
-                        borderColor: highlightedAction == .add ? .green : nil,
-                        action: onAdd
-                    )
-                    .frame(width: 66, alignment: .center)
-                    .transition(.opacity.combined(with: .scale))
+                // Keep the capsule centred on the tile; + sits below without shifting it.
+                .overlay(alignment: .bottom) {
+                    if showFloatingAddButton {
+                        GlassButton(
+                            icon: "plus",
+                            foregroundColor: highlightedAction == .add ? .green : .primary,
+                            borderColor: highlightedAction == .add ? .green : nil,
+                            action: onAdd
+                        )
+                        .disabled(trainingRestricted && highlightedAction != .add)
+                        .frame(width: 66, alignment: .center)
+                        .offset(y: buttonSize + buttonSpacing)
+                        .transition(.opacity.combined(with: .scale))
+                    }
                 }
-            }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
             .padding(.trailing, 20)
-            .padding(.top, 5)
-            .task(id: "\(pulseTrigger)-\(scenePhase == .active)-\(reduceMotion)") {
-                isThrobbing = false
-                guard scenePhase == .active, !reduceMotion else { return }
-                do {
-                    // Two finite reminders; cancellation follows the view lifecycle and task identity.
-                    for _ in 0..<2 {
-                        isThrobbing = true
-                        try await Task.sleep(for: .milliseconds(600))
-                        isThrobbing = false
-                        try await Task.sleep(for: .milliseconds(600))
-                    }
-                } catch { isThrobbing = false }
-            }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: showFloatingAddButton)
         }
     }
@@ -1593,6 +1459,7 @@ struct ActionButton: View {
     var foregroundColor: Color? = nil
     var borderColor: Color? = nil
     var isHighlighted: Bool = false
+    var iconSize: CGFloat = 18
 
     private let buttonSize: CGFloat = 50
 
@@ -1616,7 +1483,7 @@ struct ActionButton: View {
             action()
         }) {
             Image(systemName: icon)
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: iconSize, weight: .medium))
                 .foregroundColor(foregroundColor ?? (isDestructive ? .red : .primary))
                 .frame(width: buttonSize, height: buttonSize)
                 .background(
@@ -1658,11 +1525,12 @@ struct TrainingBannerView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(.white)
                     Text(instruction)
+                        .accessibilityIdentifier("training-instruction")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white.opacity(0.9))
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
-                        ForEach(0..<7, id: \.self) { index in
+                        ForEach(0..<(TrainingStep.allCases.count - 1), id: \.self) { index in
                             Circle()
                                 .fill(index < progress ? Color.green : Color.white.opacity(0.25))
                                 .frame(width: 7, height: 7)
@@ -1687,19 +1555,20 @@ struct TrainingBannerView: View {
                         )
                 }
                 .disabled(!canFinish)
+                .accessibilityIdentifier("finish-training")
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.black.opacity(0.6))
+                    .fill(Color.black.opacity(0.35))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14)
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
             )
             .padding(.horizontal, 16)
-            .padding(.top, 54)
+            .padding(.top, 108)
             Spacer()
         }
         .allowsHitTesting(true)
@@ -1909,28 +1778,49 @@ struct ICloudRestoreConfirmationView: View {
 
 struct TileSearchView: View {
     let searchTiles: (String) -> [TileSummary]
+    let onOpenSearchTile: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var searchFocused: Bool
     @State private var query = ""
     @State private var results: [TileSummary] = []
 
+    private func resultRow(_ item: TileSummary) -> some View {
+        let statusLabel = item.status == .active ? "Live" : item.status == .completed ? "Completed" : "Deleted"
+        let symbol = item.status == .active ? "globe" : item.status == .completed ? "checkmark.circle.fill" : "trash"
+        return HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(item.status == .active ? Color.green : Color.gray)
+                .frame(width: 28)
+                .accessibilityLabel(statusLabel)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.text.isEmpty ? "(Empty)" : item.text)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Text(item.tagName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .adaptiveLiquidPanel()
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.15),
-                        Color(red: 0.1, green: 0.05, blue: 0.2)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                Color(uiColor: .systemGroupedBackground)
+                    .ignoresSafeArea()
 
                 VStack(spacing: 16) {
                     TextField("Search tiles", text: $query)
+                        .focused($searchFocused)
                         .textFieldStyle(.plain)
                         .font(.system(size: 16))
-                        .foregroundColor(.white)
+                        .foregroundStyle(Color.primary)
                         .padding(12)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
@@ -1945,31 +1835,27 @@ struct TileSearchView: View {
                     ScrollView {
                         VStack(spacing: 12) {
                             ForEach(results) { item in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(item.text.isEmpty ? "(Empty)" : item.text)
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(.white)
-                                    Text(item.tagName)
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.white.opacity(0.6))
+                                Group {
+                                    if item.status == .active {
+                                        Button {
+                                            Haptics.optionTap()
+                                            onOpenSearchTile(item.id)
+                                        } label: {
+                                            resultRow(item)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityHint("Opens this tile in its category")
+                                    } else {
+                                        resultRow(item)
+                                    }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(.ultraThinMaterial)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .fill(Color.gray.opacity(0.15))
-                                        )
-                                )
                                 .padding(.horizontal, 20)
                             }
 
                             if results.isEmpty {
                                 Text("No results")
                                     .font(.system(size: 14))
-                                    .foregroundColor(.white.opacity(0.6))
+                                    .foregroundStyle(.secondary)
                                     .padding(.top, 20)
                             }
                         }
@@ -1985,7 +1871,6 @@ struct TileSearchView: View {
                         Haptics.optionTap()
                         dismiss()
                     }
-                    .foregroundColor(.white)
                 }
             }
         }
@@ -1994,6 +1879,7 @@ struct TileSearchView: View {
         }
         .onAppear {
             results = searchTiles(query)
+            searchFocused = true
         }
     }
 }
@@ -2090,7 +1976,7 @@ struct DuplicatesView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 backgroundGradient
                     .ignoresSafeArea()
@@ -2148,22 +2034,25 @@ struct CompletedTilesView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 ForEach(displayTiles) { tile in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(tile.text.isEmpty ? "(Empty)" : tile.text)
-                            .font(.system(size: 15, weight: .medium))
-                        Text(tagNameProvider(tile.tagId))
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
-                    .contextMenu {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(tile.text.isEmpty ? "(Empty)" : tile.text)
+                                .font(.body)
+                            Text(tagNameProvider(tile.tagId))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Button("Restore") {
                             Haptics.optionTap()
-                            tiles.removeAll { $0.id == tile.id }
                             onRestore(tile)
                         }
+                        .buttonStyle(.borderless)
+                        .frame(minHeight: 44)
+                        .accessibilityLabel("Restore \(tile.text.isEmpty ? "empty tile" : tile.text)")
                     }
                 }
                 .onDelete { displayedOffsets in
@@ -2217,23 +2106,26 @@ struct RecentlyDeletedView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 Section {
                     ForEach(displayTiles) { tile in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(tile.text.isEmpty ? "(Empty)" : tile.text)
-                                .font(.system(size: 15, weight: .medium))
-                            Text(tagNameProvider(tile.tagId))
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                        }
-                        .contextMenu {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(tile.text.isEmpty ? "(Empty)" : tile.text)
+                                    .font(.body)
+                                Text(tagNameProvider(tile.tagId))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             Button("Restore") {
                                 Haptics.optionTap()
-                                tiles.removeAll { $0.id == tile.id }
                                 onRestore(tile)
                             }
+                            .buttonStyle(.borderless)
+                            .frame(minHeight: 44)
+                            .accessibilityLabel("Restore \(tile.text.isEmpty ? "empty tile" : tile.text)")
                         }
                     }
                     .onDelete { displayedOffsets in
@@ -2385,5 +2277,102 @@ struct ResetConfirmationView: View {
             .padding(.horizontal, 40)
             .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 10)
         }
+    }
+}
+
+
+struct ProPurchaseView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var pro = ProStore.shared
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 26) {
+                    ZStack {
+                        Circle().fill(.indigo.opacity(0.12)).frame(width: 180, height: 180)
+                        Image(systemName: "brain").font(.system(size: 82)).foregroundStyle(.indigo)
+                        Image(systemName: "sparkles").font(.largeTitle).foregroundStyle(.orange).offset(x: 62, y: -58)
+                    }.accessibilityHidden(true)
+                    VStack(spacing: 12) {
+                        Text(pro.hasPro ? "Hello, limitless brain." : "More room for your thoughts.")
+                            .font(.largeTitle.bold()).multilineTextAlignment(.center)
+                        Text(pro.hasPro ? "BrainDump Pro is active" : "Give your ideas room to grow with BrainDump Pro.")
+                            .font(.title3).multilineTextAlignment(.center)
+                        Label("Unlimited active tiles", systemImage: "square.grid.3x3.fill").font(.headline).foregroundStyle(.indigo)
+                        Text("Capture now. Sort later.").foregroundStyle(.secondary)
+                    }
+                    purchaseOption(id: ProStore.monthlyID)
+                    purchaseOption(id: ProStore.lifetimeID)
+                    if pro.hasSandboxEntitlement {
+                        Text("Sandbox Pro is active. Test purchases do not charge you. To repeat a first purchase or free trial, clear your Sandbox Apple Account’s purchase history, then refresh purchase options.")
+                            .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
+                    if let message = pro.message { Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+                    if pro.busy { ProgressView().accessibilityLabel("Processing purchase") }
+                    #if DEBUG
+                    VStack(spacing: 10) {
+                        Toggle("Unlock Pro for testing", isOn: Binding(
+                            get: { pro.testUnlockEnabled }, set: { pro.setTestUnlock($0) }))
+                            .accessibilityIdentifier("pro-test-unlock")
+                        Text("Development only. No purchase or payment. Turn off to test the free limit again.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }.padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    #endif
+                    Button("Restore purchases") { Task { await pro.restore() } }.disabled(pro.busy)
+                    Button("Refresh purchase options") { Task { await pro.load() } }.disabled(pro.busy || pro.loading)
+                    HStack {
+                        Link("Privacy", destination: URL(string: "https://cakesquared.co.uk/privacy-policy.html")!)
+                        Link("Terms", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                    }.font(.footnote)
+                    Text("Free includes 25 active tiles. Your saved thoughts remain yours, even if your subscription ends.")
+                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("BrainDump Pro").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
+        .task { await pro.load() }
+    }
+
+    private func purchaseOption(id: String) -> some View {
+        let product = pro.products.first { $0.id == id }
+        let monthly = id == ProStore.monthlyID
+        let offersOneMonthFree = monthly && product?.subscription?.introductoryOffer?.paymentMode == .freeTrial
+            && product?.subscription?.introductoryOffer?.period.unit == .month
+            && product?.subscription?.introductoryOffer?.period.value == 1
+        let trial = offersOneMonthFree && pro.eligibleForTrial
+        return VStack(alignment: .leading, spacing: 14) {
+            Label(monthly ? "Monthly" : "Lifetime", systemImage: monthly ? "calendar" : "infinity")
+                .font(.headline).foregroundStyle(.indigo)
+            if offersOneMonthFree {
+                Text(trial ? "One month free" : "One month free for eligible new subscribers")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.indigo)
+            }
+            if let product {
+                Text(monthly ? "\(product.displayPrice) / month" : "\(product.displayPrice) once")
+                    .font(.title2.bold())
+            } else if pro.loading {
+                ProgressView("Loading price…").font(.subheadline)
+            } else {
+                Text("Price unavailable").font(.subheadline).foregroundStyle(.secondary)
+            }
+            Text(monthly ? (trial ? "1 month free, then \(product?.displayPrice ?? "") per month. Auto-renews until cancelled." : "Unlimited active tiles. Billed monthly. Auto-renews until cancelled.") : "Unlimited active tiles for life. One payment, no subscription.")
+                .font(.subheadline).foregroundStyle(.secondary)
+            Button {
+                guard let product else { return }
+                Task { await pro.purchase(product) }
+            } label: {
+                Text(monthly ? (trial ? "Start 1-month free trial" : "Subscribe monthly") : "Get lifetime Pro")
+                    .frame(maxWidth: .infinity, minHeight: 32)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(product == nil || pro.busy || pro.loading || (pro.hasPro && !pro.hasSandboxEntitlement))
+            .accessibilityIdentifier(monthly ? "pro-monthly-purchase" : "pro-lifetime-purchase")
+        }.padding(22).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
     }
 }

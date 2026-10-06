@@ -13,7 +13,7 @@ struct ThoughtDetailView: View {
     @State private var linkText = ""
     @State private var zoomedAttachment: ThoughtAttachment?
     @AppStorage("DefaultTileFillHex") private var defaultFill = "E9E3FF"
-    @AppStorage("DefaultTileBorderHex") private var defaultBorder = "7565AB"
+    @AppStorage("DefaultTileBorderHex") private var defaultBorder = "3C315C"
     private let original: ThoughtRecord
     @State private var conflictSaved = false
     var onSave: (ThoughtRecord) -> Void
@@ -27,31 +27,14 @@ struct ThoughtDetailView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Your thought") {
+                Section {
                     TextEditor(text: $draft.text)
                         .font(.body)
                         .frame(minHeight: 180)
                         .accessibilityLabel("Thought text")
                         .accessibilityIdentifier("thought-editor-text")
                 }
-                Section("Category") {
-                    Picker("Category", selection: $draft.tagId) {
-                        ForEach(store.tags.filter { $0.isDeleted != true }) { category in Text(category.name).tag(category.id) }
-                    }
-                }
-                Section("Tile appearance") {
-                    ColorPicker("Tile colour", selection: fillBinding, supportsOpacity: false)
-                    ColorPicker("Border colour", selection: borderBinding, supportsOpacity: false)
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(fillBinding.wrappedValue)
-                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(borderBinding.wrappedValue, lineWidth: 3))
-                        .overlay(Text(draft.text.isEmpty ? "Your thought" : draft.text).font(.body.weight(.medium))
-                            .foregroundStyle(readableTextColor).lineLimit(4).padding())
-                        .frame(height: 130)
-                        .accessibilityLabel("Tile appearance preview")
-                    Button("Use category colours") { draft.fillHex = nil; draft.borderHex = nil }
-                }
-                Section("Images and screenshots") {
+                Section {
                     PhotosPicker(selection: $photo, matching: .images) {
                         Label("Add image or screenshot", systemImage: "photo.badge.plus")
                     }.disabled(importing)
@@ -68,7 +51,7 @@ struct ThoughtDetailView: View {
                         }
                     }
                 }
-                Section("Web links") {
+                Section("Add weblinks") {
                     TextField("https://example.com", text: $linkText)
                         .textContentType(.URL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                     HStack {
@@ -88,9 +71,25 @@ struct ThoughtDetailView: View {
                         }
                     }
                 }
+                Section {
+                    Picker("Category", selection: $draft.tagId) {
+                        ForEach(store.tags.filter { $0.isDeleted != true }) { category in Text(category.name).tag(category.id) }
+                    }
+                }
+                Section("Tile appearance") {
+                    ColorPicker("Tile colour", selection: fillBinding, supportsOpacity: false)
+                    ColorPicker("Border colour", selection: borderBinding, supportsOpacity: false)
+                    TileSurface(fill: fillBinding.wrappedValue)
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(borderBinding.wrappedValue, lineWidth: 3))
+                        .overlay(Text(draft.text.isEmpty ? "Your thought" : draft.text).font(.body.weight(.medium))
+                            .foregroundStyle(readableTextColor).lineLimit(4).padding())
+                        .frame(height: 130)
+                        .accessibilityLabel("Tile appearance preview")
+                    Button("Use default category colours") { draft.fillHex = nil; draft.borderHex = nil }
+                }
             }
             .interactiveDismissDisabled(importing || draft != original || !unsavedImageFiles.isEmpty)
-            .navigationTitle("Thought")
+            .navigationTitle("Tile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { discardImportedImages(); dismiss() }.disabled(importing) }
@@ -118,15 +117,15 @@ struct ThoughtDetailView: View {
 
     private var category: ThoughtCategory? { store.tags.first { $0.id == draft.tagId } }
     private var fillBinding: Binding<Color> {
-        Binding(get: { Color(uiColor: Self.uiColor(draft.fillHex ?? category?.fillHex ?? defaultFill)) },
+        Binding(get: { Color(uiColor: Self.uiColor(draft.fillHex ?? TilePalette.categoryFill(category, fallback: defaultFill))) },
                 set: { draft.fillHex = Self.hex($0) })
     }
     private var borderBinding: Binding<Color> {
-        Binding(get: { Color(uiColor: Self.uiColor(draft.borderHex ?? category?.borderHex ?? defaultBorder)) },
+        Binding(get: { Color(uiColor: Self.uiColor(draft.borderHex ?? TilePalette.categoryBorder(category, fallback: defaultBorder))) },
                 set: { draft.borderHex = Self.hex($0) })
     }
     private var readableTextColor: Color {
-        let color = Self.uiColor(draft.fillHex ?? category?.fillHex ?? defaultFill)
+        let color = Self.uiColor(draft.fillHex ?? TilePalette.categoryFill(category, fallback: defaultFill))
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
         func linear(_ v: CGFloat) -> CGFloat { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }

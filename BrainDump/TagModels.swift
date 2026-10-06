@@ -160,14 +160,26 @@ class TagManager: ObservableObject {
         catch { saveError = error.localizedDescription; loadTags() }
     }
 
-    func addUserTag(name: String, color: TagColor) {
+    @discardableResult
+    func addUserTag(name: String, color: TagColor, fillHex: String? = nil, borderHex: String? = nil) -> Bool {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canAddMoreUserTags, !clean.isEmpty else { return }
+        guard canAddMoreUserTags, !clean.isEmpty else { return false }
         // Random IDs avoid devices independently creating the same next integer category.
+        let store = ThoughtStore.shared
         var nextId = Int.random(in: 10_000...Int(Int32.max))
-        while ThoughtStore.shared.tags.contains(where: { $0.id == nextId }) { nextId = Int.random(in: 10_000...Int(Int32.max)) }
-        tags.append(Tag(id: nextId, name: clean, color: color, isDefault: false))
-        saveTags()
+        while store.tags.contains(where: { $0.id == nextId }) { nextId = Int.random(in: 10_000...Int(Int32.max)) }
+        let category = ThoughtCategory(id: nextId, name: clean, color: color.rawValue, isDefault: false,
+                                       fillHex: fillHex, borderHex: borderHex)
+        do {
+            // Commit name and both colours together, preserving deleted categories used by sync.
+            try store.updateCategory(category)
+            loadTags()
+            saveError = nil
+            return true
+        } catch {
+            saveError = error.localizedDescription
+            return false
+        }
     }
 
     func deleteUserTag(_ tag: Tag) {

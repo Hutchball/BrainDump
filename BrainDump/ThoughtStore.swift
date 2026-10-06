@@ -10,7 +10,9 @@ final class ThoughtStore: ObservableObject {
             let name = "BrainDump-UIFixture-" + UUID().uuidString
             return ThoughtStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(name), defaults: UserDefaults(suiteName: name)!)
         }
-        return ThoughtStore()
+        let store = ThoughtStore()
+        store.creationHasPro = { ProStore.shared.hasPro }
+        return store
     }()
     @Published private(set) var thoughts: [ThoughtRecord] = []
     @Published private(set) var tags: [ThoughtCategory] = []
@@ -22,6 +24,8 @@ final class ThoughtStore: ObservableObject {
     private var activeRecords: [ThoughtRecord] = []
     private let fileURL: URL
     private var loadFailed = false
+    var creationHasPro: (() -> Bool)?
+    var canCreateThought: Bool { creationHasPro == nil || creationHasPro!() || activeThoughts.count < ProStore.freeTileLimit }
     var didChange: ((Set<String>) -> Void)?
 
     init(directory: URL? = nil, defaults: UserDefaults = .standard) {
@@ -49,7 +53,8 @@ final class ThoughtStore: ObservableObject {
         try update(record)
         return record
     }
-    func update(_ thought: ThoughtRecord) throws {
+    func update(_ thought: ThoughtRecord, preservingConflict: Bool = false) throws {
+        if self.thought(id: thought.id) == nil && !preservingConflict && !canCreateThought { throw ValidationError.freeLimitReached }
         try Self.validate(thought)
         guard thought.attachments.count <= 10, thought.text.utf8.count <= 1_024 * 1_024 else { throw ValidationError.thoughtTooLarge }
         var record = thought
@@ -143,7 +148,7 @@ final class ThoughtStore: ObservableObject {
         var saved = draft
         let conflict = current != original && current != draft
         if conflict { saved.id = UUID().uuidString; saved.status = .active; saved.archivedAt = nil }
-        try update(saved)
+        try update(saved, preservingConflict: conflict)
         return (thought(id: saved.id) ?? saved, conflict)
     }
     func importRecords(_ records: [ThoughtRecord], replacing: Bool) throws {
@@ -221,6 +226,35 @@ final class ThoughtStore: ObservableObject {
         next.cloudRecords[key] = systemFields; try commit(next); didChange?(next.pendingIDs)
     }
     var pendingIDs: Set<String> { database.pendingIDs }
+    /// A missing server record must be recreated without its obsolete change tag/assets.
+    func resetCloudRecord(id: String) throws {
+        var next = database
+        next.cloudRecords.removeValue(forKey: id)
+        next.cloudAttachmentSlots?.removeValue(forKey: id)
+        next.pendingIDs.insert(id)
+        try commit(next)
+    }
+    func requeueAllCloudRecords() throws {
+        var next = database
+        next.cloudRecords = [:]; next.cloudAttachmentSlots = nil
+        next.pendingIDs.formUnion(next.thoughts.map(\.id))
+        next.pendingIDs.formUnion(next.tags.map { "category:\($0.id)" })
+        try commit(next)
+    }
+    /// Sync acknowledgements and change tokens belong to one CloudKit environment.
+    /// Older builds did not track this, so their first upgraded sync rebuilds the baseline.
+    func prepareCloudSync(environment: String, force: Bool = false) throws {
+        guard !accountSyncPaused else { return }
+        guard force || database.cloudSyncEnvironment != environment else { return }
+        var next = database
+        next.cloudSyncEnvironment = environment
+        next.syncState = nil
+        next.cloudRecords = [:]
+        next.cloudAttachmentSlots = nil
+        next.pendingIDs.formUnion(next.thoughts.map(\.id))
+        next.pendingIDs.formUnion(next.tags.map { "category:\($0.id)" })
+        try commit(next)
+    }
     var syncState: Data? { database.syncState }
     func saveSyncState(_ state: Data) throws { var next = database; next.syncState = state; try commit(next) }
     func cloudRecordData(id: String) -> Data? { database.cloudRecords[id] }
@@ -256,9 +290,10 @@ final class ThoughtStore: ObservableObject {
         didChange?(next.pendingIDs)
     }
     enum ValidationError: LocalizedError {
-        case tooManyAttachments, invalidAttachment, thoughtTooLarge
+        case tooManyAttachments, invalidAttachment, thoughtTooLarge, freeLimitReached
         var errorDescription: String? {
             switch self {
+            case .freeLimitReached: return "You have 25 active tiles. Complete or delete a tile to make room, or unlock unlimited tiles with BrainDump Pro."
             case .thoughtTooLarge: return "This thought is too large. Split it into smaller thoughts."
             case .tooManyAttachments: return "A thought can hold up to 10 attachments. Add another thought to keep capturing."
             case .invalidAttachment: return "This thought contains an invalid attachment."

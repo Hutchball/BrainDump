@@ -11,7 +11,7 @@ struct TagFilterListView: View {
             HStack(spacing: 4) {
                 categoryButton("chevron.left", label: "Previous category", delta: -1)
                 let tag = tagManager.getTag(byId: selectedTagId) ?? tagManager.getDefaultTag()
-                Text(tag.name)
+                Text(selectedTagId == 0 ? "Unsorted" : tag.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(2)

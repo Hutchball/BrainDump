@@ -42,6 +42,7 @@ struct ThoughtDatabase: Codable, Equatable, Sendable {
     var pendingIDs: Set<String> = []
     var cloudRecords: [String: Data] = [:]
     var syncState: Data?
+    var cloudSyncEnvironment: String?
     var accountSyncPaused: Bool?
     var cloudAttachmentSlots: [String: [String?]]?
 }

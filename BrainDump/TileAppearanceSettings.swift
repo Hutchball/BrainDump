@@ -2,6 +2,31 @@ import SwiftUI
 import UIKit
 
 enum TilePalette {
+    private static let categorySwatches = Dictionary(uniqueKeysWithValues:
+        TagColor.allCases.map { ($0.rawValue, hex($0.uiColor)) })
+    private static let categoryBorders = categorySwatches.mapValues { prominentBorder($0) }
+
+    static func prominentBorder(_ fill: String) -> String {
+        guard let rgb = UInt32(fill, radix: 16) else { return "48404F" }
+        let channels = [Double((rgb >> 16) & 255), Double((rgb >> 8) & 255), Double(rgb & 255)]
+        let adjusted = channels.map { Int($0 * 0.42) }
+        return String(format: "%02X%02X%02X", adjusted[0], adjusted[1], adjusted[2])
+    }
+
+    /// Explicit appearance wins; otherwise categorised thoughts inherit the category swatch.
+    static func categoryFill(_ category: ThoughtCategory?, fallback: String) -> String {
+        if let fill = category?.fillHex { return fill }
+        guard let category, category.id != 0 else { return fallback }
+        return categorySwatches[category.color] ?? fallback
+    }
+
+    static func categoryBorder(_ category: ThoughtCategory?, fallback: String) -> String {
+        if let border = category?.borderHex { return border }
+        guard let category, category.id != 0 else { return fallback }
+        if let fill = category.fillHex { return prominentBorder(fill) }
+        return categoryBorders[category.color] ?? fallback
+    }
+
     static func color(_ hex: String) -> Color {
         let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         guard cleaned.count == 6, let rgb = UInt32(cleaned, radix: 16) else { return Color(uiColor: .secondarySystemBackground) }
@@ -26,17 +51,17 @@ struct TileAppearanceSettings: View {
     @ObservedObject var store: ThoughtStore
     @Environment(\.dismiss) private var dismiss
     @AppStorage("DefaultTileFillHex") private var defaultFill = "E9E3FF"
-    @AppStorage("DefaultTileBorderHex") private var defaultBorder = "7565AB"
+    @AppStorage("DefaultTileBorderHex") private var defaultBorder = "3C315C"
     @State private var saveError: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Default tile colours") {
+                Section("Unsorted tile colours") {
                     ColorPicker("Tile colour", selection: globalBinding(fill: true), supportsOpacity: false)
                     ColorPicker("Border colour", selection: globalBinding(fill: false), supportsOpacity: false)
                     preview(fill: defaultFill, border: defaultBorder, text: "Your thought")
-                    Button("Reset defaults") { defaultFill = "E9E3FF"; defaultBorder = "7565AB" }
+                    Button("Reset defaults") { defaultFill = "E9E3FF"; defaultBorder = "3C315C" }
                 }
                 Section {
                     ForEach(store.tags.filter { $0.isDeleted != true }) { category in
@@ -46,8 +71,8 @@ struct TileAppearanceSettings: View {
                                     ColorPicker("Tile colour", selection: categoryBinding(category.id, fill: true), supportsOpacity: false)
                                     ColorPicker("Border colour", selection: categoryBinding(category.id, fill: false), supportsOpacity: false)
                                     let current = store.tags.first { $0.id == category.id } ?? category
-                                    preview(fill: current.fillHex ?? defaultFill, border: current.borderHex ?? defaultBorder, text: category.name)
-                                    Button("Use default colours") {
+                                    preview(fill: TilePalette.categoryFill(current, fallback: defaultFill), border: TilePalette.categoryBorder(current, fallback: defaultBorder), text: category.name)
+                                    Button("Use category colour") {
                                         guard var current = store.tags.first(where: { $0.id == category.id }) else { return }
                                         current.fillHex = nil; current.borderHex = nil
                                         save(current)
@@ -78,7 +103,7 @@ struct TileAppearanceSettings: View {
     private func categoryBinding(_ id: Int, fill: Bool) -> Binding<Color> {
         Binding(get: {
             let category = store.tags.first { $0.id == id }
-            return TilePalette.color(fill ? (category?.fillHex ?? defaultFill) : (category?.borderHex ?? defaultBorder))
+            return TilePalette.color(fill ? (TilePalette.categoryFill(category, fallback: defaultFill)) : (TilePalette.categoryBorder(category, fallback: defaultBorder)))
         }, set: { color in
             guard var category = store.tags.first(where: { $0.id == id }) else { return }
             if fill { category.fillHex = TilePalette.hex(color) } else { category.borderHex = TilePalette.hex(color) }
@@ -97,8 +122,8 @@ struct TileAppearanceSettings: View {
             .foregroundStyle(TilePalette.foreground(fill))
             .padding(16)
             .frame(width: 160, height: 160)
-            .background(TilePalette.color(fill), in: RoundedRectangle(cornerRadius: 18))
-            .overlay { RoundedRectangle(cornerRadius: 18).strokeBorder(TilePalette.color(border), lineWidth: 3) }
+            .background { TileSurface(fill: TilePalette.color(fill)) }
+            .overlay { RoundedRectangle(cornerRadius: 18).strokeBorder(TilePalette.color(border), lineWidth: 4) }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .accessibilityLabel("Tile preview: \(text)")

@@ -33,6 +33,7 @@ struct TileSummary: Identifiable {
     let text: String
     let tagId: Int
     let tagName: String
+    var status: ThoughtRecord.Status = .active
 }
 
 struct DuplicateGroup: Identifiable {
@@ -55,7 +56,10 @@ enum TrainingStep: Int, CaseIterable {
     case retagTile
     case completeTile
     case addThoughtTile
+    case createFirstTile
     case swipeTags
+    case readThought
+    case returnHome
     case finish
 }
 
