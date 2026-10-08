@@ -121,6 +121,16 @@ final class CloudSyncService: ObservableObject, CKSyncEngineDelegate {
         }
     }
     func syncNow() async {
+        // Store changes during delegate callbacks can reach this method through
+        // enqueue/requestSync. An ordinary Task (even after yield) inherits
+        // CloudKit's task-local callback context and send/fetch then trap.
+        // Detach at this entry point so every caller clears that context, while
+        // keeping service/store access isolated to the main actor.
+        await Task.detached { @MainActor [weak self] in
+            await self?.performSync()
+        }.value
+    }
+    private func performSync() async {
         guard !accountBlocked, let engine else { return }
         if syncing { syncRequested = true; return }
         syncing = true

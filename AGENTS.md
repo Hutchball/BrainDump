@@ -101,6 +101,9 @@ Top-right lighting is an independent local Appearance toggle. Simulate an offscr
 Preserve the production bundle identifier, legacy defaults, category IDs, and tile assignments across upgrades. Validate in-place updates from the distributed build on signed devices; distinguish older iCloud Documents backups from CloudKit record sync. Never apply a new purchase limit by truncating an existing library.
 
 - [CKSyncEngine immediate fetch](https://developer.apple.com/documentation/cloudkit/cksyncengine-5sie5/fetchchanges(_:))
+- [CKSyncEngine delegate callback ordering](https://developer.apple.com/documentation/cloudkit/cksyncenginedelegate-1q7g8)
+
+Never invoke manual CloudKit send/fetch operations in an inherited delegate callback task context. Use a detached task boundary before manual sync; `Task.yield()` and ordinary `Task` creation do not clear task-local callback context. Keep store and sync bookkeeping on the main actor.
 - [Registering for remote notifications](https://developer.apple.com/documentation/uikit/uiapplication/registerforremotenotifications())
 
 - [StoreKit localized product information](https://developer.apple.com/documentation/storekit/product)

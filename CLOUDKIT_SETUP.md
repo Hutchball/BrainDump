@@ -50,6 +50,8 @@ Recovery now requeues the entire retained collection when its zone is missing, c
 
 ## Immediate sync and home status
 
+The 7 October TestFlight crash (incident C605408C-A88F-4725-B0D1-C31EB178BDBD) trapped in `CKSyncEngine.sendChanges` because a task scheduled from delegate processing inherited CloudKit's callback context. Manual sync now enters through a detached task, with service bookkeeping still on the main actor. Validate the next signed build with edits during uploads, conflict recovery, repeated Sync now taps, and foreground sync; unsigned simulator checks cannot exercise this CloudKit assertion.
+
 Every durable local change requests a serialized send/fetch pass. Launch and foreground entry also request a pass, including on an empty device. Registering for remote notifications enables CKSyncEngine's automatic subscription-driven downloads; no polling timer is used. The top-right home control shows orange for waiting/unavailable/paused, a spinner during sync, and green after a successful pass with no pending local records. Tap it for the detailed status and Sync now. Green reflects this device's latest successful check, not confirmation that another device has received the records.
 
 Validate using the next TestFlight build on both devices with the same iCloud account: keep both apps open, capture/edit/category-assign/complete/delete on either device, and check convergence in both directions. Repeat with the iPad initially empty, offline changes and foreground return. Capture the Sync screen's exact error if orange persists. Production delivery still requires signed-device validation.

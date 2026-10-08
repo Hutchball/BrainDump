@@ -1,0 +1,200 @@
+/Users/paulhutch/Desktop/App Development/BrainDump/BrainDumpUITests/LivingBrainUITests.swift:180: error: -[BrainDumpUITests.LivingBrainUITests testBlankCaptureShrinksAwayWithoutAddingThought] : Failed to synthesize event: Neither element nor any descendant has keyboard focus. Event dispatch snapshot: Other, {{121.0, 220.5}, {160.0, 160.0}}, identifier: 'thought-editor-text'
+Test Case '-[BrainDumpUITests.LivingBrainUITests testBlankCaptureShrinksAwayWithoutAddingThought]' failed (11.840 seconds).
+/Users/paulhutch/Desktop/App Development/BrainDump/BrainDumpUITests/LivingBrainUITests.swift:279: error: -[BrainDumpUITests.LivingBrainUITests testBrainInboxKeepsCategoryPickerVisibleAfterCategorising] : Failed to tap "Organise Brain Dump inbox" Button: No matches found for Elements matching predicate '"Organise Brain Dump inbox" IN identifiers' from input {(
+Test Case '-[BrainDumpUITests.LivingBrainUITests testBrainInboxKeepsCategoryPickerVisibleAfterCategorising]' failed (5.829 seconds).
+Test Case '-[BrainDumpUITests.LivingBrainUITests testCategoryTilesRemainHittableAfterRepeatedScrolling]' passed (19.285 seconds).
+Test Case '-[BrainDumpUITests.LivingBrainUITests testCompletionRemovesThoughtAfterAnimation]' passed (5.993 seconds).
+Test Case '-[BrainDumpUITests.LivingBrainUITests testLongPressShowsCompleteThoughtAndDismissesBackToCategory]' passed (9.584 seconds).
+/Users/paulhutch/Desktop/App Development/BrainDump/BrainDumpUITests/LivingBrainUITests.swift:118: error: -[BrainDumpUITests.LivingBrainUITests testNewThoughtCanBeCapturedAndReadInCategory] : Failed to synthesize event: Neither element nor any descendant has keyboard focus. Event dispatch snapshot: Other, {{121.0, 220.5}, {160.0, 160.0}}, identifier: 'thought-editor-text'
+Test Case '-[BrainDumpUITests.LivingBrainUITests testNewThoughtCanBeCapturedAndReadInCategory]' failed (12.697 seconds).
+/Users/paulhutch/Desktop/App Development/BrainDump/BrainDumpUITests/LivingBrainUITests.swift:138: error: -[BrainDumpUITests.LivingBrainUITests testQuickCaptureSurvivesLeavingAppWithoutSave] : XCTAssertTrue failed
+Test Case '-[BrainDumpUITests.LivingBrainUITests testQuickCaptureSurvivesLeavingAppWithoutSave]' failed (8.837 seconds).
+Test Case '-[BrainDumpUITests.LivingBrainUITests testRepeatedEmptyCaptureDismissalInSphere]' passed (39.054 seconds).
+/Users/paulhutch/Desktop/App Development/BrainDump/BrainDumpUITests/LivingBrainUITests.swift:248: error: -[BrainDumpUITests.LivingBrainUITests testSettingsUsesSinglePageAndShowsFeedbackAndVersion] : XCTAssertEqual failed: ("XCTWaiterResult(rawValue: 2)") is not equal to ("XCTWaiterResult(rawValue: 1)")
+Test Case '-[BrainDumpUITests.LivingBrainUITests testSettingsUsesSinglePageAndShowsFeedbackAndVersion]' failed (8.818 seconds).
+Test Case '-[BrainDumpUITests.LivingBrainUITests testSortingDismissesAfterLastThoughtAndEmptyInboxStaysOnSphere]' passed (34.701 seconds).
+Test Case '-[BrainDumpUITests.LivingBrainUITests testSwipeCategoriesFromUnsortedRestoresSortingPickerOnReturn]' passed (8.946 seconds).
+Test Case '-[BrainDumpUITests.LivingBrainUITests testTrainingRequiresActionsInOrderBeforeFinishing]' passed (28.338 seconds).
+/Users/paulhutch/Desktop/App Development/BrainDump/BrainDumpUITests/LivingBrainUITests.swift:271: error: -[BrainDumpUITests.LivingBrainUITests testUnsortedTileOpensSortingQueueFromSphere] : Failed to get matching snapshot: No matches found for first query match sequence: `Descendants matching type Any` -> `Elements matching predicate 'identifier BEGINSWITH "thought-tile-" AND value BEGINSWITH "Selected"'`, given input App element pid: 52883
+Test Case '-[BrainDumpUITests.LivingBrainUITests testUnsortedTileOpensSortingQueueFromSphere]' failed (7.336 seconds).
+MONKEY 0: action 0
+MONKEY 1: action 3
+MONKEY 2: action 1
+MONKEY 3: action 1
+MONKEY 4: action 13
+MONKEY 5: action 2
+MONKEY 6: action 13
+MONKEY 7: action 3
+MONKEY 8: action 13
+MONKEY 9: action 6
+MONKEY 10: action 0
+MONKEY 11: action 10
+MONKEY 12: action 4
+MONKEY 13: action 9
+MONKEY 14: action 3
+MONKEY 15: action 9
+MONKEY 16: action 7
+MONKEY 17: action 6
+MONKEY 18: action 1
+MONKEY 19: action 2
+MONKEY 20: action 5
+MONKEY 21: action 3
+MONKEY 22: action 2
+MONKEY 23: action 10
+MONKEY 24: action 1
+MONKEY 25: action 10
+MONKEY 26: action 4
+MONKEY 27: action 1
+MONKEY 28: action 4
+MONKEY 29: action 10
+MONKEY 30: action 11
+MONKEY 31: action 6
+MONKEY 32: action 12
+MONKEY 33: action 10
+MONKEY 34: action 0
+MONKEY 35: action 1
+MONKEY 36: action 2
+MONKEY 37: action 3
+MONKEY 38: action 0
+MONKEY 39: action 2
+MONKEY 40: action 12
+MONKEY 41: action 10
+MONKEY 42: action 6
+MONKEY 43: action 13
+MONKEY 44: action 11
+MONKEY 45: action 1
+MONKEY 46: action 1
+MONKEY 47: action 12
+MONKEY 48: action 4
+MONKEY 49: action 3
+MONKEY 50: action 1
+MONKEY 51: action 0
+MONKEY 52: action 7
+MONKEY 53: action 6
+MONKEY 54: action 8
+MONKEY 55: action 13
+MONKEY 56: action 12
+MONKEY 57: action 0
+MONKEY 58: action 12
+MONKEY 59: action 4
+MONKEY 60: action 13
+MONKEY 61: action 12
+MONKEY 62: action 9
+MONKEY 63: action 1
+MONKEY 64: action 13
+MONKEY 65: action 5
+MONKEY 66: action 4
+MONKEY 67: action 2
+MONKEY 68: action 6
+MONKEY 69: action 4
+MONKEY 70: action 12
+MONKEY 71: action 7
+MONKEY 72: action 9
+MONKEY 73: action 0
+MONKEY 74: action 10
+MONKEY 75: action 4
+MONKEY 76: action 13
+MONKEY 77: action 10
+MONKEY 78: action 1
+MONKEY 79: action 3
+MONKEY 80: action 2
+MONKEY 81: action 10
+MONKEY 82: action 1
+MONKEY 83: action 10
+MONKEY 84: action 5
+MONKEY 85: action 7
+MONKEY 86: action 4
+MONKEY 87: action 13
+MONKEY 88: action 1
+MONKEY 89: action 6
+MONKEY 90: action 3
+MONKEY 91: action 12
+MONKEY 92: action 2
+MONKEY 93: action 7
+MONKEY 94: action 2
+MONKEY 95: action 0
+MONKEY 96: action 5
+MONKEY 97: action 13
+MONKEY 98: action 9
+MONKEY 99: action 5
+MONKEY 100: action 9
+MONKEY 101: action 7
+MONKEY 102: action 3
+MONKEY 103: action 12
+MONKEY 104: action 7
+MONKEY 105: action 12
+MONKEY 106: action 12
+MONKEY 107: action 13
+MONKEY 108: action 13
+MONKEY 109: action 1
+MONKEY 110: action 0
+MONKEY 111: action 10
+MONKEY 112: action 10
+MONKEY 113: action 3
+MONKEY 114: action 6
+MONKEY 115: action 4
+MONKEY 116: action 4
+MONKEY 117: action 10
+MONKEY 118: action 11
+MONKEY 119: action 5
+MONKEY 120: action 13
+MONKEY 121: action 5
+MONKEY 122: action 5
+MONKEY 123: action 2
+MONKEY 124: action 4
+MONKEY 125: action 5
+MONKEY 126: action 3
+MONKEY 127: action 3
+MONKEY 128: action 4
+MONKEY 129: action 7
+MONKEY 130: action 8
+MONKEY 131: action 0
+MONKEY 132: action 12
+MONKEY 133: action 13
+MONKEY 134: action 7
+MONKEY 135: action 13
+MONKEY 136: action 1
+MONKEY 137: action 1
+MONKEY 138: action 9
+MONKEY 139: action 1
+MONKEY 140: action 3
+MONKEY 141: action 13
+MONKEY 142: action 10
+MONKEY 143: action 13
+MONKEY 144: action 12
+MONKEY 145: action 3
+MONKEY 146: action 12
+MONKEY 147: action 9
+MONKEY 148: action 4
+MONKEY 149: action 6
+MONKEY 150: action 6
+MONKEY 151: action 0
+MONKEY 152: action 9
+MONKEY 153: action 5
+MONKEY 154: action 4
+MONKEY 155: action 5
+MONKEY 156: action 7
+MONKEY 157: action 5
+MONKEY 158: action 8
+MONKEY 159: action 8
+MONKEY 160: action 6
+MONKEY 161: action 8
+MONKEY 162: action 6
+MONKEY 163: action 1
+MONKEY 164: action 8
+MONKEY 165: action 13
+MONKEY 166: action 1
+MONKEY 167: action 7
+MONKEY 168: action 5
+MONKEY 169: action 8
+MONKEY 170: action 8
+MONKEY 171: action 7
+MONKEY 172: action 11
+MONKEY 173: action 6
+MONKEY 174: action 5
+MONKEY 175: action 10
+MONKEY 176: action 8
+MONKEY 177: action 2
+MONKEY 178: action 1
+MONKEY 179: action 4
+Test Case '-[BrainDumpUITests.MonkeyUITests testSeededMonkey]' passed (147.420 seconds).
