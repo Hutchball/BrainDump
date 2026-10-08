@@ -47,13 +47,13 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
+                    Button { showCategoriesView = true } label: { Label("Categories", systemImage: "tag.fill").labelStyle(SettingsLabelStyle()) }
+                    Button { showOptionsView = true } label: { Label("Options", systemImage: "slider.horizontal.3").labelStyle(SettingsLabelStyle()) }
+                }
+                Section {
                     Button { showPro = true } label: {
                         Label("Meet BrainDump Pro", systemImage: "sparkles").labelStyle(SettingsLabelStyle())
                     }
-                }
-                Section {
-                    Button { showCategoriesView = true } label: { Label("Categories", systemImage: "tag.fill").labelStyle(SettingsLabelStyle()) }
-                    Button { showOptionsView = true } label: { Label("Options", systemImage: "slider.horizontal.3").labelStyle(SettingsLabelStyle()) }
                 }
                 Section {
                     Button { showAbout = true } label: { Label("About & Privacy", systemImage: "info.circle").labelStyle(SettingsLabelStyle()) }
@@ -587,6 +587,10 @@ struct CategoriesView: View {
     @ObservedObject var tagManager: TagManager
     @Binding var tileTags: [Int]
     @Environment(\.dismiss) private var dismiss
+    @State private var categoryEditMode: EditMode = .inactive
+    @State private var confirmReset = false
+    @State private var renaming: Tag?
+    @State private var categoryName = ""
     @State private var pendingDeletion: Tag?
     @State private var showCreateTag = false
     @State private var newTagName = ""
@@ -595,44 +599,42 @@ struct CategoriesView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Default Categories") {
-                    ForEach(tagManager.defaultTagsInDisplayOrder) { tag in
-                        CategoryRow(tag: tag, isDefault: true)
+                Section {
+                    ForEach(tagManager.tagsInDisplayOrder.filter(\.isDefault)) { tag in
+                        editableCategoryRow(tag)
+                            .moveDisabled(!categoryEditMode.isEditing)
                     }
+                    .onMove { source, destination in
+                        tagManager.moveCategories(from: source, to: destination, defaults: true)
+                    }
+                    Button("Reset to Default") { confirmReset = true }
+                        .buttonStyle(.borderless)
+                } header: {
+                    Text("Default Categories")
+                } footer: {
+                    Text("Restores default category names, colours and order. Your thoughts and custom categories are kept.")
                 }
                 Section {
-                    if tagManager.userTags.isEmpty {
-                        Text("No custom categories yet").foregroundStyle(.secondary)
-                    } else {
-                        ForEach(tagManager.userTags) { tag in
-                            CategoryRow(tag: tag, isDefault: false)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        Haptics.optionTap()
-                                        pendingDeletion = tag
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
+                    ForEach(tagManager.tagsInDisplayOrder.filter { !$0.isDefault }) { tag in
+                        editableCategoryRow(tag)
+                            .moveDisabled(!categoryEditMode.isEditing)
+                    }
+                    .onMove { source, destination in
+                        tagManager.moveCategories(from: source, to: destination, defaults: false)
+                    }
+                    if tagManager.canAddMoreUserTags {
+                        Button { showCreateTag = true } label: {
+                            Label("New category", systemImage: "plus.circle.fill")
                         }
                     }
                 } header: {
-                    HStack {
-                        Text("Your Categories")
-                        Spacer()
-                        if tagManager.canAddMoreUserTags {
-                            Button { showCreateTag = true } label: {
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundStyle(Color.secondary)
-                                    .font(.title2)
-                                    .frame(minWidth: 44, minHeight: 44)
-                            }
-                            .accessibilityLabel("New category")
-                        }
-                    }
+                    Text("Your Categories")
+                } footer: {
+                    Text("Tap Edit to rename categories, delete custom categories, or drag the reorder handles within each section.")
                 }
             }
             .listStyle(.insetGrouped)
+            .environment(\.editMode, $categoryEditMode)
             .alert("Delete category?", isPresented: Binding(
                 get: { pendingDeletion != nil },
                 set: { if !$0 { pendingDeletion = nil } }
@@ -645,9 +647,29 @@ struct CategoriesView: View {
             } message: { tag in
                 Text("Are you sure you want to delete \(tag.name)? Its tiles will move to Unsorted.")
             }
+            .alert("Rename category", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+                TextField("Category name", text: $categoryName)
+                Button("Save") {
+                    if let renaming { tagManager.rename(renaming, to: categoryName) }
+                    renaming = nil
+                }.disabled(categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) { renaming = nil }
+            }
+            .alert("Reset default categories?", isPresented: $confirmReset) {
+                Button("Reset to Default", role: .destructive) { tagManager.resetDefaultCategories() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Default names, colours and order will be restored. Your thoughts and custom categories will be kept.")
+            }
             .navigationTitle("Categories")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(categoryEditMode.isEditing ? "Finish Editing" : "Edit") {
+                        categoryEditMode = categoryEditMode.isEditing ? .inactive : .active
+                    }
+                    .accessibilityIdentifier("categories-edit-toggle")
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
             .sheet(isPresented: $showCreateTag) {
@@ -660,6 +682,49 @@ struct CategoriesView: View {
             } message: { Text(tagManager.saveError ?? "Please try again.") }
         }
     }
+    private func editableCategoryRow(_ tag: Tag) -> some View {
+        HStack(spacing: 8) {
+            categoryButton(tag)
+            if categoryEditMode.isEditing && !tag.isDefault {
+                Button(role: .destructive) { pendingDeletion = tag } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Delete category \(tag.name)")
+                .accessibilityIdentifier("category-delete-\(tag.id)")
+            }
+        }
+        .accessibilityAction(named: "Move up") {
+            if categoryEditMode.isEditing { moveCategory(tag, by: -1) }
+        }
+        .accessibilityAction(named: "Move down") {
+            if categoryEditMode.isEditing { moveCategory(tag, by: 1) }
+        }
+    }
+
+    private func moveCategory(_ tag: Tag, by offset: Int) {
+        let group = tagManager.tagsInDisplayOrder.filter { $0.isDefault == tag.isDefault }
+        guard let from = group.firstIndex(where: { $0.id == tag.id }) else { return }
+        let to = from + offset
+        guard group.indices.contains(to) else { return }
+        tagManager.moveCategories(from: IndexSet(integer: from), to: to > from ? to + 1 : to, defaults: tag.isDefault)
+    }
+
+    private func categoryButton(_ tag: Tag) -> some View {
+        CategoryRow(tag: tag, isDefault: tag.isDefault)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard categoryEditMode.isEditing else { return }
+                renaming = tag
+                categoryName = tag.name
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("category-row-\(tag.id)")
+            .accessibilityHint(categoryEditMode.isEditing ? "Tap to rename" : "Tap Edit to rename or reorder categories")
+    }
+
 }
 
 // MARK: - Options View
@@ -879,32 +944,41 @@ struct OptionsView: View {
 
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
-    private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0" }
-    private var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1" }
+    private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unavailable" }
+    private var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unavailable" }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Text("BrainDump").font(.title2.bold())
-                    Text("Capture now. Organise later.").foregroundStyle(.secondary)
-                    LabeledContent("Version", value: version)
-                    LabeledContent("Build", value: build)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 16) {
+                            Text("BrainDump").font(.title2.bold()).fixedSize()
+                            Text("Capture now. Sort later.")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("BrainDump").font(.title2.bold())
+                            Text("Capture now. Sort later.").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                Section("Privacy") {
+                Section {
                     Link("Privacy Policy", destination: URL(string: "https://cakesquared.co.uk/privacy-policy.html")!)
-                    NavigationLink("How BrainDump handles your data") { BrainDumpPrivacyView() }
-                }
-                Section("Links") {
+
                     Link("CakeSquared Website", destination: URL(string: "https://cakesquared.co.uk")!)
-                }
-                Section("Contact") {
                     Link(destination: URL(string: "mailto:braindumpfeedback@cakesquared.co.uk")!) {
                         Label("Send Feedback", systemImage: "envelope")
                     }
-                    Text("braindumpfeedback@cakesquared.co.uk").font(.footnote).textSelection(.enabled)
+                    NavigationLink("How BrainDump handles your data") { BrainDumpPrivacyView() }
                 }
                 Section {
+                    LabeledContent("Version", value: version)
+                        .accessibilityIdentifier("about-version")
+                    LabeledContent("Build", value: build)
+                        .accessibilityIdentifier("about-build")
                     Text("© \(Calendar.current.component(.year, from: Date()).formatted(.number.grouping(.never))) BrainDump")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -1085,7 +1159,7 @@ struct CategoryRow: View {
                 .accessibilityHidden(true)
             Text(tag.name).font(.body.weight(.medium)).foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
         }
         .frame(minHeight: 44)
@@ -1561,7 +1635,7 @@ struct TrainingBannerView: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.black.opacity(0.35))
+                    .fill(Color.black.opacity(0.82))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14)
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)

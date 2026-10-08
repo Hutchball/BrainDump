@@ -95,3 +95,12 @@ Added environment-aware sync bookkeeping migration, non-destructive manual sync 
 ## Apple Vision Pro deferral — 6 October 2026
 
 Owner requested Vision Pro be held from submission until tested. Native visionOS 1.0 remains a Prepare for Submission draft. The roadmap in README.md preserves a future spatial sphere experience and device-validation requirements. Compatible iPhone/iPad availability was turned off in App Store Connect; verify this setting remains off before release.
+
+
+## Build 2 — 8 October 2026
+
+- Incremented the app, Share extension and test target build numbers from 1 to 2; marketing version remains 1.0.
+- Category settings use native section reordering, visible custom-category trash controls and Edit-only renaming. Category assignments offer Undo with a returning tile animation and a slower 0.55-second movement for displaced neighbours.
+- Current version also includes saved category display order/reset, direct category-header selection, archive Undo, capture/deletion polish, sphere density scaling and training step pacing.
+- All 35 unit tests and the two focused category editing/Undo UI tests passed on the iPhone 17 Pro / iOS 26.5 simulator. Built app and Share extension both report CFBundleVersion 2. Project plist validation and whitespace checks passed.
+- The preceding build with these interaction changes was installed and launched on the connected iPhone; build 2 itself was verified in the simulator. Live production sync, purchase and energy validation remain separate device checks.

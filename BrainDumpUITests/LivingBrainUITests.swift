@@ -21,11 +21,14 @@ final class LivingBrainUITests: XCTestCase {
         }
         waitForInstruction("Tap any tile")
         let tiles = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'thought-tile-' AND label BEGINSWITH 'Demo thought:' AND (label CONTAINS 'An idea for a weekend adventure' OR label CONTAINS 'Start a small creative project' OR label CONTAINS 'A question to explore' OR label CONTAINS 'A thought for later' OR label CONTAINS 'Try something new' OR label CONTAINS 'Plan a surprise')"))
-        guard let tile = tiles.allElementsBoundByIndex.first(where: { $0.isHittable }) else { XCTFail("No training tile: \(app.debugDescription)"); return }
+        let bannerBottom = max(finish.frame.maxY, instruction.frame.maxY) + 40
+        guard let tile = tiles.allElementsBoundByIndex.first(where: {
+            $0.isHittable && $0.frame.midY > bannerBottom && app.frame.contains(CGPoint(x: $0.frame.midX, y: $0.frame.midY))
+        }) else { XCTFail("No training tile: \(app.debugDescription)"); return }
         XCTAssertTrue(tile.label.hasPrefix("Demo thought:"))
         tile.tap()
         waitForInstruction("Scroll to look through")
-        XCTAssertGreaterThan(instruction.frame.minY, app.staticTexts["thought-category-heading"].frame.maxY)
+        XCTAssertGreaterThan(instruction.frame.minY, app.buttons["thought-category-heading"].frame.maxY)
         XCTAssertFalse(app.buttons["Complete thought"].isEnabled)
         let scroll = app.scrollViews["thought-category-scroll"]
         XCTAssertTrue(scroll.waitForExistence(timeout: 10))
@@ -64,7 +67,9 @@ final class LivingBrainUITests: XCTestCase {
         let categoryTiles = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'thought-tile-'"))
         guard let readable = categoryTiles.allElementsBoundByIndex.first(where: { $0.isHittable }) else { XCTFail("No readable tile"); return }
         readable.press(forDuration: 0.7)
-        app.buttons["Done"].tap()
+        let fullClose = app.buttons["thought-detail-close"]
+        XCTAssertTrue(fullClose.waitForExistence(timeout: 5))
+        fullClose.tap()
         waitForInstruction("home page")
         app.buttons["Close thought"].tap()
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: finish)
@@ -194,13 +199,18 @@ final class LivingBrainUITests: XCTestCase {
             let tile = app.descendants(matching: .any)["thought-tile-\(index)"].firstMatch
             XCTAssertTrue(tile.waitForExistence(timeout: 5))
             category.tap()
+            if index == 11 {
+                XCTAssertTrue(app.buttons["thought-archive-undo"].waitForExistence(timeout: 2))
+                XCTAssertTrue(app.scrollViews["thought-category-scroll"].exists)
+                XCTAssertFalse(app.buttons["Organise Brain Dump inbox"].exists)
+            }
             if index < 11 {
                 let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: tile)
                 XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 5), .completed)
             }
         }
         let brain = app.buttons["Organise Brain Dump inbox"]
-        XCTAssertTrue(brain.waitForExistence(timeout: 5))
+        XCTAssertTrue(brain.waitForExistence(timeout: 10))
         brain.tap()
         XCTAssertTrue(brain.exists)
         XCTAssertFalse(app.scrollViews["thought-category-scroll"].exists)
@@ -217,14 +227,32 @@ final class LivingBrainUITests: XCTestCase {
         let assigned = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: first)
         XCTAssertEqual(XCTWaiter.wait(for: [assigned], timeout: 5), .completed)
         app.scrollViews["thought-category-scroll"].swipeLeft()
-        let heading = app.staticTexts["thought-category-heading"]
-        let category = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Things to do'"), object: heading)
+        let heading = app.buttons["thought-category-heading"]
+        let category = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'Things to do'"), object: heading)
         XCTAssertEqual(XCTWaiter.wait(for: [category], timeout: 5), .completed)
         XCTAssertFalse(app.descendants(matching: .any)["thought-category-picker"].firstMatch.exists)
         app.scrollViews["thought-category-scroll"].swipeRight()
-        let unsorted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Unsorted'"), object: heading)
+        let unsorted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'Unsorted'"), object: heading)
         XCTAssertEqual(XCTWaiter.wait(for: [unsorted], timeout: 5), .completed)
         XCTAssertTrue(app.descendants(matching: .any)["thought-category-picker"].firstMatch.exists)
+    }
+
+    @MainActor
+    func testCategoryHeadingOffersDirectNavigation() {
+        let app = launchFixture()
+        let choice = app.buttons["category-choice-3"]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        choice.tap()
+        let heading = app.buttons["thought-category-heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        heading.tap()
+        let destination = app.buttons["category-menu-choice-3"]
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        destination.tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 'Things to do'"), object: heading)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        XCTAssertTrue(app.scrollViews["thought-category-scroll"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["thought-category-picker"].firstMatch.exists)
     }
 
     @MainActor
@@ -240,18 +268,84 @@ final class LivingBrainUITests: XCTestCase {
     }
 
     @MainActor
+    func testCategoriesEditShowsDeleteBesideReordering() {
+        let app = launchFixture()
+        let close = app.buttons["Close thought"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        close.tap()
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+        app.buttons["Categories"].tap()
+        let create = app.buttons["New category"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        if !create.isHittable { app.swipeUp() }
+        create.tap()
+        let name = app.textFields["Enter category name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("Edit mode test")
+        app.buttons["Create"].tap()
+        let edit = app.buttons["categories-edit-toggle"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        let movieRow = app.descendants(matching: .any)["category-row-1"].firstMatch
+        movieRow.tap()
+        XCTAssertFalse(app.alerts["Rename category"].exists)
+        edit.tap()
+        movieRow.tap()
+        XCTAssertTrue(app.alerts["Rename category"].waitForExistence(timeout: 5))
+        app.alerts["Rename category"].textFields.firstMatch.tap()
+        app.alerts["Rename category"].textFields.firstMatch.typeText(" renamed")
+        app.alerts.buttons["Save"].tap()
+        XCTAssertTrue(movieRow.label.contains("renamed"))
+        let trash = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'category-delete-'" )).firstMatch
+        XCTAssertTrue(trash.waitForExistence(timeout: 5))
+        if !trash.isHittable { app.swipeUp() }
+        XCTAssertTrue(trash.isEnabled)
+        XCTAssertTrue(app.frame.contains(trash.frame))
+        let movieCell = app.cells.containing(.any, identifier: "category-row-1").firstMatch
+        let taskCell = app.cells.containing(.any, identifier: "category-row-3").firstMatch
+        XCTAssertTrue(movieCell.exists)
+        XCTAssertTrue(taskCell.exists)
+        // The system owns the reorder accessory and its accessibility identifier.
+        // Drag its standard trailing position and verify the saved row order.
+        let movieHandle = movieCell.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        let taskHandle = taskCell.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.3))
+        movieHandle.press(forDuration: 1, thenDragTo: taskHandle)
+        let reordered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            movieCell.frame.minY < taskCell.frame.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [reordered], timeout: 5), .completed)
+        let editLayout = XCTAttachment(screenshot: app.screenshot())
+        editLayout.name = "Category Edit-mode row controls"
+        editLayout.lifetime = .keepAlways
+        add(editLayout)
+        trash.tap()
+        XCTAssertTrue(app.alerts["Delete category?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+        edit.tap()
+        XCTAssertFalse(trash.exists)
+        movieRow.tap()
+        XCTAssertFalse(app.alerts["Rename category"].exists)
+    }
+
+    @MainActor
     func testSettingsUsesSinglePageAndShowsFeedbackAndVersion() {
         let app = launchFixture()
-        let picker = app.descendants(matching: .any)["thought-category-picker"].firstMatch
-        app.buttons["Close thought"].tap()
-        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: picker)
-        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 5), .completed)
-        app.buttons["Settings"].tap()
+        let close = app.buttons["Close thought"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        close.tap()
+        let settings = app.buttons["Settings"]
+        if !settings.waitForExistence(timeout: 3), close.exists { close.tap() }
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.navigationBars.matching(identifier: "Settings").count, 1)
         XCTAssertTrue(app.buttons["Categories"].exists)
         app.buttons["About & Privacy"].tap()
-        XCTAssertTrue(app.staticTexts["braindumpfeedback@cakesquared.co.uk"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Capture now. Sort later."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Send Feedback"].exists)
+        XCTAssertFalse(app.staticTexts["braindumpfeedback@cakesquared.co.uk"].exists)
         XCTAssertTrue(app.staticTexts["Version"].exists)
         XCTAssertTrue(app.staticTexts["Build"].exists)
         app.buttons["How BrainDump handles your data"].tap()
@@ -275,15 +369,35 @@ final class LivingBrainUITests: XCTestCase {
     func testBrainInboxKeepsCategoryPickerVisibleAfterCategorising() {
         let app = launchFixture()
         let picker = app.descendants(matching: .any)["thought-category-picker"].firstMatch
-        app.buttons["Close thought"].tap()
-        app.buttons["Organise Brain Dump inbox"].tap()
+        let close = app.buttons["Close thought"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        close.tap()
+        let inbox = app.buttons["Organise Brain Dump inbox"]
+        XCTAssertTrue(inbox.waitForExistence(timeout: 10))
+        inbox.tap()
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         XCTAssertTrue(app.scrollViews["thought-category-scroll"].exists)
         let category = app.buttons["category-choice-3"]
         XCTAssertTrue(category.exists)
+        let selected = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Fixture thought' AND value BEGINSWITH 'Selected'")).firstMatch
+        XCTAssertTrue(selected.waitForExistence(timeout: 5))
+        let originalLabel = selected.label
         category.tap()
+        let undo = app.buttons["thought-archive-undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 2))
+        let displacedLabel = selected.label
+        let displaced = app.buttons.matching(NSPredicate(format: "label == %@", displacedLabel)).firstMatch
+        let previousPosition = displaced.frame.midY
+        undo.tap()
+        let restored = app.buttons.matching(NSPredicate(format: "label == %@", originalLabel)).firstMatch
+        let returned = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true AND value BEGINSWITH 'Selected'"), object: restored)
+        XCTAssertEqual(XCTWaiter.wait(for: [returned], timeout: 5), .completed)
+        XCTAssertFalse(undo.exists)
+        XCTAssertTrue(displaced.exists)
+        XCTAssertGreaterThan(abs(displaced.frame.midY - previousPosition), 10)
+        XCTAssertFalse((displaced.value as? String ?? "").hasPrefix("Selected"))
         XCTAssertTrue(picker.exists)
-        XCTAssertEqual(app.staticTexts["thought-category-heading"].label, "Unsorted")
+        XCTAssertEqual(app.buttons["thought-category-heading"].value as? String, "Unsorted")
     }
 
     @MainActor
@@ -291,14 +405,45 @@ final class LivingBrainUITests: XCTestCase {
         let app = launchFixture()
         let tile = app.descendants(matching: .any)["thought-tile-0"].firstMatch
         XCTAssertTrue(tile.waitForExistence(timeout: 10))
+        let originalWidth = tile.frame.width
+        let originalLabel = tile.label
         tile.press(forDuration: 0.7)
         let fullText = app.descendants(matching: .any)["thought-detail-text"].firstMatch
         XCTAssertTrue(fullText.waitForExistence(timeout: 5))
         XCTAssertTrue(fullText.label.contains("The complete thought remains readable after opening the expanded tile."))
         let close = app.buttons["thought-detail-close"]
-        XCTAssertTrue(close.isHittable)
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: close)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+        XCTAssertGreaterThan(fullText.frame.width, originalWidth)
         close.tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: close)
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 5), .completed)
         XCTAssertTrue(app.scrollViews["thought-category-scroll"].waitForExistence(timeout: 5))
+        XCTAssertTrue(tile.isHittable)
+        XCTAssertEqual(tile.label, originalLabel)
+        let expanded = XCTAttachment(screenshot: app.screenshot())
+        expanded.name = "Returned to original category tile"
+        expanded.lifetime = .keepAlways
+        add(expanded)
+        tile.press(forDuration: 0.7)
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        let flipped = XCTAttachment(screenshot: app.screenshot())
+        flipped.name = "Expanded centred thought tile"
+        flipped.lifetime = .keepAlways
+        add(flipped)
+        // A second long press on the readable text reverses the same presentation.
+        fullText.press(forDuration: 0.7)
+        let returned = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: close)
+        XCTAssertEqual(XCTWaiter.wait(for: [returned], timeout: 5), .completed)
+        XCTAssertTrue(tile.isHittable)
+        tile.press(forDuration: 0.7)
+        let outsideReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: close)
+        XCTAssertEqual(XCTWaiter.wait(for: [outsideReady], timeout: 5), .completed)
+        fullText.tap()
+        XCTAssertTrue(close.exists)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
+        let outsideClosed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: close)
+        XCTAssertEqual(XCTWaiter.wait(for: [outsideClosed], timeout: 5), .completed)
         XCTAssertTrue(tile.isHittable)
     }
 }

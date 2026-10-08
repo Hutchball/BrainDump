@@ -33,6 +33,7 @@ struct ThoughtCategory: Identifiable, Codable, Equatable, Sendable {
     var borderHex: String?
     var modifiedAt: Date = Date()
     var isDeleted: Bool?
+    var displayOrder: Int?
 }
 
 struct ThoughtDatabase: Codable, Equatable, Sendable {

@@ -8,6 +8,7 @@ let iCloudBackupLastErrorKey = "ICloudBackupLastError"
 /// Views select and mutate records by ID. Scrolling never changes the identity of a thought.
 struct ContentView: View {
     @ObservedObject private var store = ThoughtStore.shared
+    @ObservedObject private var archiveUndo = ArchiveUndoController.shared
     @StateObject private var tagManager = TagManager()
     @EnvironmentObject private var sync: CloudSyncService
     @Environment(\.scenePhase) private var scenePhase
@@ -33,6 +34,7 @@ struct ContentView: View {
     @State private var lastFrame: CFTimeInterval = 0
     @State private var spinning = false
     @State private var pinchStart: Double?
+    @State private var sphereOvershoot = 0.0
     @State private var selectedID: String?
     @State private var categoryID: Int?
     @State private var centeredID: String?
@@ -41,6 +43,8 @@ struct ContentView: View {
     @State private var categoryTilesArrived = true
     @State private var categoryFlightID = UUID()
     @State private var categoryTransitioning = false
+    @State private var pendingFocused: ThoughtRecord?
+    @State private var focusSourceFrame: CGRect?
     @State private var focused: ThoughtRecord?
     @State private var editor: ThoughtRecord?
     @State private var capture: ThoughtRecord?
@@ -50,8 +54,11 @@ struct ContentView: View {
     @State private var discardingCapture = false
     @State private var captureDismissTask: Task<Void, Never>?
     @State private var organisingInbox = false
+    @State private var returningThoughtID: String?
+    @State private var returningThoughtArrived = true
     @State private var departingThoughtID: String?
     @State private var completingThoughtID: String?
+    @State private var deletingThoughtID: String?
     @State private var completionTask: Task<Void, Never>?
     @State private var categorisationTask: Task<Void, Never>?
     @State private var showTags = false
@@ -64,13 +71,15 @@ struct ContentView: View {
     @State private var initialised = false
     @State private var demo: [ThoughtRecord]?
     @State private var trainingStep = TrainingStep.spinSphere
+    @State private var pendingTrainingStep: TrainingStep?
+    @State private var trainingAdvanceTask: Task<Void, Never>?
     @State private var trainingReadPresented = false
     @State private var trainingCaptureID: String?
     @State private var keepsTrainingCapture = false
     @State private var previousTrainingSelection: String?
+    @State private var trainingScrollMoved = false
     @State private var replayCategory: Int?
     @State private var replaySelection: String?
-    @State private var pendingFocusTask: Task<Void, Never>?
     #if DEBUG
     @AppStorage("ShowDebugPanel") private var showDebug = false
     #endif
@@ -80,6 +89,10 @@ struct ContentView: View {
         let records = demo ?? store.activeThoughts
         if let capture, !records.contains(where: { $0.id == capture.id }) { return records + [capture] }
         return records
+    }
+    private var effectiveSphereScale: Double {
+        let population = SphereMath.populationScale(tileCount: thoughts.count)
+        return max(0.001, min(1.6, sphereScale * population) + sphereOvershoot * population)
     }
     private var selected: ThoughtRecord? { thoughts.first { $0.id == selectedID } }
     private var categoryThoughts: [ThoughtRecord] { thoughts.filter { $0.tagId == categoryID } }
@@ -109,21 +122,30 @@ struct ContentView: View {
                             }
                         }
                 }
-                if capture == nil { controls }
+                if capture == nil { if focused == nil { controls } }
                 else {
                     VStack {
                         Text(tagManager.getTag(byId: capture?.tagId ?? 0)?.name ?? "Unsorted").font(.headline).padding(12).background(.regularMaterial, in: Capsule())
                         Spacer()
                         Button("Done") { finishCapture() }
                             .buttonStyle(.borderedProminent)
+                            .buttonBorderShape(.roundedRectangle(radius: 12))
+                            .controlSize(.large)
+                            .font(.headline)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(.white.opacity(0.5), lineWidth: 1)
+                                    .allowsHitTesting(false)
+                            }
+                            .frame(minWidth: 120, minHeight: 52)
                             .accessibilityIdentifier("thought-save")
                             .disabled(discardingCapture)
                             .padding()
                     }.zIndex(25)
                 }
-                if categoryID != nil { categoryHeader }
-                if capture == nil, let selected { actions(for: selected) }
-                if demo != nil {
+                if categoryID != nil && focused == nil { categoryHeader }
+                if capture == nil && focused == nil, let selected { actions(for: selected) }
+                if demo != nil && focused == nil {
                     TrainingBannerView(instruction: trainingText, progress: trainingStep.rawValue,
                         canFinish: trainingStep == .finish, onFinish: finishTraining)
                         .zIndex(30)
@@ -132,10 +154,12 @@ struct ContentView: View {
                 if showDebug { DebugPanelView(tileCount: thoughts.count).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding().allowsHitTesting(false) }
                 #endif
             }
-            .allowsHitTesting(!categoryTransitioning)
+            .allowsHitTesting(focused == nil && !categoryTransitioning && pendingTrainingStep == nil)
+            .disabled(focused != nil)
+            .accessibilityHidden(focused != nil)
         }
         .overlay(alignment: .bottom) {
-            if showTags, let selected {
+            if focused == nil, showTags, let selected {
                 CategoryPickerView(tagManager: tagManager, selectedTagId: Binding(get: {
                     thoughts.first { $0.id == selected.id }?.tagId ?? 0
                 }, set: { retag(selected.id, to: $0) }), onDismiss: { showTags = false })
@@ -144,13 +168,49 @@ struct ContentView: View {
                 .disabled(departingThoughtID != nil || categoryTransitioning)
             }
         }
+        .overlay { if focused == nil { archiveUndoControl } }
+        .overlayPreferenceValue(ThoughtTileAnchorKey.self) { anchors in
+            GeometryReader { geometry in
+                Color.clear
+                    .allowsHitTesting(false)
+                    .onChange(of: pendingFocused?.id, initial: true) { _, id in
+                        guard let id else { return }
+                        guard scenePhase == .active else { pendingFocused = nil; return }
+                        focusSourceFrame = anchors[id].map { geometry[$0] }
+                            ?? CGRect(x: geometry.size.width / 2 - 80, y: geometry.size.height / 2 - 80, width: 160, height: 160)
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { focused = pendingFocused }
+                    }
+            }
+        }
+        .fullScreenCover(item: $focused) { thought in
+            ThoughtFocusView(thoughtID: thought.id, initialThought: thought,
+                sourceFrame: focusSourceFrame ?? CGRect(x: 100, y: 200, width: 160, height: 160),
+                readOnly: demo != nil,
+                isDemo: demo != nil && !(keepsTrainingCapture && thought.id == trainingCaptureID)) {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        focused = nil
+                        pendingFocused = nil
+                        focusSourceFrame = nil
+                    }
+                    if demo != nil && trainingStep == .readThought && trainingReadPresented {
+                        trainingReadPresented = false
+                        advanceTraining(to: .returnHome)
+                    }
+                    reconcileSelection()
+                }
+                .presentationBackground(.clear)
+                .interactiveDismissDisabled()
+        }
         .task { await initialise(); refreshSphereLayout() }
         .sheet(isPresented: $showPro) { ProPurchaseView() }
-        .sheet(item: $focused, onDismiss: reconcileSelection) { ThoughtFocusView(thoughtID: $0.id) }
         .sheet(item: $editor, onDismiss: {
             if demo != nil && trainingStep == .readThought && trainingReadPresented {
                 trainingReadPresented = false
-                trainingStep = .returnHome
+                advanceTraining(to: .returnHome)
             }
             reconcileSelection()
         }) { thought in
@@ -183,20 +243,69 @@ struct ContentView: View {
             updateReminders()
         }
         .onChange(of: store.tags) { _, _ in refreshCategories() }
+        .onChange(of: archiveUndo.thoughtID) { _, _ in reconcileSelection() }
         .onChange(of: tagManager.saveError) { _, value in if let value { error = value } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await ProStore.shared.refreshEntitlements(); await importSharedCaptures(); openPendingNotification() }
             } else {
-                stopSpin(); pendingFocusTask?.cancel()
+                sphereOvershoot = 0; pinchStart = nil
+                stopSpin()
                 cancelCategoryFlight()
                 _ = persistCapture()
                 if phase == .background { finishCapture() }
             }
         }
-        .onChange(of: reduceMotion) { _, enabled in if enabled { stopSpin() } }
+        .onChange(of: categoryTransitioning) { _, transitioning in
+            if !transitioning { scheduleTrainingAdvance(); reconcileSelection() }
+        }
+        .onChange(of: reduceMotion) { _, enabled in
+            if enabled { stopSpin(); cancelCategoryFlight() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: BrainDumpNotificationManager.openBrainDumpNotificationName)) { _ in openPendingNotification() }
-        .onDisappear { stopSpin(); pendingFocusTask?.cancel(); cancelCategoryFlight(); _ = persistCapture() }
+        .onDisappear { stopSpin(); cancelCategoryFlight(); _ = persistCapture() }
+    }
+
+    @ViewBuilder
+    private var archiveUndoControl: some View {
+        if archiveUndo.thoughtID != nil, demo == nil {
+            VStack {
+                Spacer().allowsHitTesting(false)
+                Button {
+                    let animateReturn = categoryID.map { archiveUndo.canRestoreCategory($0) } == true
+                        && !reduceMotion && scenePhase == .active
+                    if animateReturn {
+                        // Stage the same stable tile before it re-enters the saved collection.
+                        returningThoughtID = archiveUndo.thoughtID
+                        returningThoughtArrived = false
+                        categoryTransitioning = true
+                    }
+                    do {
+                        // Animate the restored row's insertion so existing rows make room.
+                        try withAnimation(undoRepositionAnimation) {
+                            if let restored = try archiveUndo.undo(in: store) {
+                                if categoryID == restored.tagId {
+                                    selectedID = restored.id
+                                    if !animateReturn { centeredID = restored.id }
+                                } else if animateReturn { cancelCategoryFlight() }
+                            } else if animateReturn { cancelCategoryFlight() }
+                        }
+                    } catch {
+                        if animateReturn { cancelCategoryFlight() }
+                        self.error = error.localizedDescription
+                    }
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44)
+                        .padding(.horizontal, 12)
+                }
+                .buttonStyle(.plain)
+                .background(.regularMaterial, in: Capsule())
+                .accessibilityLabel("Undo last thought action")
+                .accessibilityIdentifier("thought-archive-undo")
+            }.padding(.bottom, showTags ? 176 : 16).zIndex(35)
+        }
     }
 
     /// Layout metadata only: record order and category browsing remain unchanged.
@@ -227,13 +336,20 @@ struct ContentView: View {
                 }.foregroundStyle(.white).padding(40).allowsHitTesting(false)
             }
         }
+        .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.88), value: thoughts.count)
         .gesture(DragGesture(minimumDistance: 12).onChanged { drag($0, size: geometry.size) }.onEnded { _ in endDrag() }, including: capture == nil ? .all : .subviews)
         .simultaneousGesture(MagnifyGesture().onChanged { value in
             guard demo == nil else { return }
             stopSpin()
-            if pinchStart == nil { pinchStart = sphereScale }
-            sphereScale = min(1.6, max(0.45, (pinchStart ?? sphereScale) * value.magnification))
-        }.onEnded { _ in pinchStart = nil }, including: capture == nil ? .all : .subviews)
+            if pinchStart == nil { pinchStart = max(0.001, sphereScale + sphereOvershoot) }
+            let proposed = (pinchStart ?? sphereScale) * value.magnification
+            sphereScale = min(1.6, max(0.45, proposed))
+            // Follow the complete pinch; only the released size is constrained.
+            sphereOvershoot = proposed - sphereScale
+        }.onEnded { _ in
+            pinchStart = nil
+            withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.62)) { sphereOvershoot = 0 }
+        }, including: capture == nil ? .all : .subviews)
     }
 
     private func categoryTiles(in geometry: GeometryProxy) -> some View {
@@ -245,13 +361,15 @@ struct ContentView: View {
             LazyVStack(spacing: 12) {
                 ForEach(categoryThoughts) { thought in
                     let index = indices[thought.id] ?? 0
+                    let outsideCollection = departingThoughtID == thought.id
+                        || (returningThoughtID == thought.id && !returningThoughtArrived && !reduceMotion)
                     CylinderTileRow(containerMidY: geometry.frame(in: .global).midY,
                         rowHeight: rowHeight, isSelected: centeredID == thought.id,
                         flightOrigin: categoryTilesArrived || reduceMotion ? nil : categoryFlightOrigin(index: index, in: geometry)) {
                         tile(thought, index: index, geometry: geometry, filtered: true)
-                            .offset(x: departingThoughtID == thought.id ? geometry.size.width : 0,
-                                    y: departingThoughtID == thought.id ? -80 : 0)
-                            .opacity(departingThoughtID == thought.id ? 0 : 1)
+                            .offset(x: outsideCollection ? geometry.size.width : 0,
+                                    y: outsideCollection ? -80 : 0)
+                            .opacity(outsideCollection ? 0 : 1)
                     }
                     .background {
                         Color.clear.contentShape(Rectangle()).onTapGesture {
@@ -260,7 +378,7 @@ struct ContentView: View {
                         }
                     }
                     .id(thought.id)
-                    .zIndex(completingThoughtID == thought.id ? 100 : (centeredID == thought.id ? 10 : 0))
+                    .zIndex(completingThoughtID == thought.id || returningThoughtID == thought.id ? 100 : (centeredID == thought.id ? 10 : 0))
                 }
             }
             .scrollTargetLayout()
@@ -286,8 +404,13 @@ struct ContentView: View {
             selectedID = id
             if let categoryID { categoryPositions[categoryID] = id }
             if demo != nil, trainingStep == .scrollTagView,
-               let previousTrainingSelection, previousTrainingSelection != id { trainingStep = .retagTile }
+               let previousTrainingSelection, previousTrainingSelection != id { trainingScrollMoved = true }
             previousTrainingSelection = id
+        }
+        .onScrollPhaseChange { _, phase in
+            if phase == .idle, demo != nil, trainingStep == .scrollTagView, trainingScrollMoved {
+                advanceTraining(to: .retagTile)
+            }
         }
         .task(id: categoryID) {
             let target = selectedID ?? categoryThoughts.first?.id
@@ -301,6 +424,23 @@ struct ContentView: View {
                 categoryTilesArrived = true
             } completion: {
                 guard categoryFlightID == flightID else { return }
+                categoryTransitioning = false
+            }
+        }
+        .task(id: returningThoughtID) {
+            guard let id = returningThoughtID, let originalCategory = categoryID else { return }
+            // Let insertion lay out, then move neighbouring rows and the returning tile together.
+            do { try await Task.sleep(for: .milliseconds(40)) } catch { return }
+            guard !Task.isCancelled, returningThoughtID == id, categoryID == originalCategory else { return }
+            withAnimation(undoRepositionAnimation, completionCriteria: .removed) {
+                proxy.scrollTo(id, anchor: .center)
+                centeredID = id
+                withAnimation(reduceMotion ? nil : .spring(response: 0.48, dampingFraction: 0.88)) {
+                    returningThoughtArrived = true
+                }
+            } completion: {
+                guard returningThoughtID == id, categoryID == originalCategory else { return }
+                returningThoughtID = nil
                 categoryTransitioning = false
             }
         }
@@ -323,9 +463,9 @@ struct ContentView: View {
         let category = store.tags.first { $0.id == thought.tagId }
         return TileView(index: index, text: capture?.id == thought.id ? capture?.text ?? thought.text : thought.text,
             isSelected: filtered ? centeredID == thought.id : selectedID == thought.id,
-            isEditing: capture?.id == thought.id, isNewTile: capture?.id == thought.id, isDeleting: false, isCompleting: completingThoughtID == thought.id,
+            isEditing: capture?.id == thought.id, isNewTile: capture?.id == thought.id, isDeleting: deletingThoughtID == thought.id, isCompleting: completingThoughtID == thought.id,
             focusRequestId: thought.id.stableUUID, orientation: orientation, containerSize: geometry.size,
-            totalCount: thoughts.count, sphereScale: sphereScale, tagId: thought.tagId,
+            totalCount: thoughts.count, sphereScale: effectiveSphereScale, tagId: thought.tagId,
             tagManager: tagManager, onTap: { select(thought) }, isTapEnabled: capture == nil && (demo == nil || trainingStep == .openTagView),
             onTextChange: { updateCaptureText($0) }, isTagChanging: false, isFiltered: filtered,
             listPosition: filtered ? index : nil,
@@ -338,7 +478,8 @@ struct ContentView: View {
             sphereFlightPosition: !filtered && sphereStaged && !reduceMotion
                 ? CGPoint(x: categoryFlightOrigin(index: index, in: geometry).x - geometry.frame(in: .global).minX,
                           y: categoryFlightOrigin(index: index, in: geometry).y - geometry.frame(in: .global).minY) : nil,
-            isDemo: demo != nil && !(keepsTrainingCapture && thought.id == trainingCaptureID))
+            isDemo: demo != nil && !(keepsTrainingCapture && thought.id == trainingCaptureID),
+            isFocusPresented: focused?.id == thought.id, thoughtAnchorID: thought.id)
     }
 
     private var categoryHeader: some View {
@@ -388,20 +529,20 @@ struct ContentView: View {
                     GlassButton(icon: "plus") { addThought() }
                         .disabled(demo != nil && trainingStep != .addThoughtTile)
                 }
-            }.padding(.horizontal, 24).padding(.bottom, 16)
+            }.padding(.horizontal, 24).padding(.bottom, archiveUndo.thoughtID == nil ? 16 : 76)
         }.zIndex(15)
         .sheet(isPresented: $showSettings, onDismiss: openSearchTile) { settings }
         .sheet(isPresented: $showSyncStatus) { SyncSettingsView() }
     }
 
     private func actions(for thought: ThoughtRecord) -> some View {
-        TileActionButtons(onClose: closeCategory, onEdit: { stopSpin(); editor = thought },
-            onChangeTag: { showTags.toggle() }, onComplete: { archive(thought, status: .completed) },
-            onDelete: { showDelete = true }, onAdd: { addThought() },
+        TileActionButtons(onClose: closeCategory, onEdit: { showTags = false; stopSpin(); editor = thought },
+            onChangeTag: { showTags.toggle() }, onComplete: { showTags = false; archive(thought, status: .completed) },
+            onDelete: { showTags = false; showDelete = true }, onAdd: { addThought() },
             closeIcon: "xmark", closeForegroundColor: .primary,
             closeBorderColor: nil, highlightedAction: trainingHighlight, showFloatingAddButton: true,
             trainingRestricted: demo != nil)
-            .disabled(completingThoughtID != nil)
+            .disabled(completingThoughtID != nil || deletingThoughtID != nil || departingThoughtID != nil)
             .zIndex(25)
     }
 
@@ -411,7 +552,7 @@ struct ContentView: View {
         if categoryID == nil { openCategory(thought.tagId, preferred: thought.id) }
         else { withAnimation(transition) { centeredID = thought.id; selectedID = thought.id } }
         if demo != nil && trainingStep == .openTagView {
-            trainingStep = .scrollTagView; previousTrainingSelection = thought.id
+            advanceTraining(to: .scrollTagView); previousTrainingSelection = thought.id
         }
     }
 
@@ -444,9 +585,7 @@ struct ContentView: View {
         if categoryID == nil { originalOrientation = orientation }
         let remembered = preferred ?? categoryPositions[id]
         let target = candidates.first(where: { $0.id == remembered })?.id ?? candidates.first?.id
-        if demo != nil, trainingStep == .swipeTags, let current = categoryID, current != id {
-            trainingStep = .readThought
-        }
+        let changedTrainingCategory = demo != nil && trainingStep == .swipeTags && categoryID != nil && categoryID != id
         if categoryID != id {
             // Position the collection before flying it in from the offscreen ring.
             var transaction = Transaction()
@@ -462,6 +601,7 @@ struct ContentView: View {
         }
         showTags = sortingInbox
         organisingInbox = sortingInbox
+        if changedTrainingCategory { advanceTraining(to: .readThought) }
     }
     private func handleCategoryBackgroundTap() {
         if showTags {
@@ -474,6 +614,7 @@ struct ContentView: View {
     private func closeCategory() {
         guard demo == nil || trainingStep == .returnHome else { return }
         guard !categoryTransitioning else { return }
+        if let categoryID, categoryThoughts.isEmpty, archiveUndo.canRestoreCategory(categoryID) { return }
         stopSpin()
         if categoryID != nil, !reduceMotion {
             flyCategoryOut { finishClosingCategory() }
@@ -490,7 +631,7 @@ struct ContentView: View {
         }
         showTags = false
         organisingInbox = false
-        if demo != nil && trainingStep == .returnHome { trainingStep = .finish }
+        if demo != nil && trainingStep == .returnHome { advanceTraining(to: .finish) }
     }
 
     /// Finish every animated frame before replacing or dismissing the collection.
@@ -513,6 +654,8 @@ struct ContentView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             categoryTransitioning = false
+            returningThoughtID = nil
+            returningThoughtArrived = true
             sphereStaged = false
             categoryTilesArrived = true
         }
@@ -527,31 +670,24 @@ struct ContentView: View {
         guard initialised, demo == nil else { return }
         if let categoryID {
             let candidates = thoughts.filter { $0.tagId == categoryID }
-            if candidates.isEmpty { closeCategory() }
+            if candidates.isEmpty {
+                guard !archiveUndo.canRestoreCategory(categoryID) else { return }
+                closeCategory()
+            }
             else if !candidates.contains(where: { $0.id == selectedID }) {
                 selectedID = candidates.first?.id; centeredID = selectedID
             }
         } else if !thoughts.contains(where: { $0.id == selectedID }) { selectedID = nil }
     }
     private func bringForward(_ thought: ThoughtRecord, index: Int) {
-        stopSpin()
-        guard demo == nil else {
-            guard trainingStep == .readThought, !categoryTransitioning else { return }
+        guard focused == nil, pendingFocused == nil, capture == nil, !categoryTransitioning else { return }
+        if demo != nil {
+            guard trainingStep == .readThought else { return }
             trainingReadPresented = true
-            editor = thought
-            return
         }
-        if categoryID == nil {
-            let current = orientation.rotate(SphereMath.generatePoint(index: spherePositions[thought.id] ?? index, total: thoughts.count))
-            let delta = Quaternion.fromVectors(current, Point3D(x: 0, y: 0, z: 1))
-            withAnimation(transition) { orientation = (delta * orientation).normalized(); selectedID = thought.id }
-        }
-        pendingFocusTask?.cancel()
-        pendingFocusTask = Task { @MainActor in
-            if !reduceMotion { try? await Task.sleep(for: .milliseconds(250)) }
-            guard !Task.isCancelled else { return }
-            focused = thought
-        }
+        stopSpin()
+        Haptics.tilePop()
+        pendingFocused = thought
     }
     private func addThought() {
         guard demo == nil || trainingStep == .addThoughtTile || trainingStep == .createFirstTile else { return }
@@ -562,7 +698,7 @@ struct ContentView: View {
         if demo != nil {
             demo?.append(new)
             trainingCaptureID = new.id
-            trainingStep = .createFirstTile
+            advanceTraining(to: .createFirstTile)
             saved = new
         } else {
             // A blank capture is only a transient sphere tile, never a saved record.
@@ -642,7 +778,7 @@ struct ContentView: View {
             return
         }
         guard persistCapture() else { return }
-        if demo != nil && trainingStep == .createFirstTile { trainingStep = .swipeTags }
+        if demo != nil && trainingStep == .createFirstTile { advanceTraining(to: .swipeTags) }
         if demo == nil { registerCaptureIfNeeded(ThoughtRecord(text: "")) }
         releaseCapture(turnSphere: true)
     }
@@ -680,7 +816,7 @@ struct ContentView: View {
         guard demo == nil || trainingStep == .retagTile else { return }
         guard let thought = thoughts.first(where: { $0.id == id }), thought.tagId != category,
               departingThoughtID == nil else { return }
-        if organisingInbox && !reduceMotion && demo == nil {
+        if categoryID != nil && !reduceMotion {
             withAnimation(.easeIn(duration: 0.25)) { departingThoughtID = id }
             categorisationTask = Task { @MainActor in
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
@@ -690,20 +826,33 @@ struct ContentView: View {
         } else { commitCategory(id, to: category) }
     }
 
+    private var undoRepositionAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.55)
+    }
+
+    private var queueAdvanceAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.35)
+    }
+
     private func commitCategory(_ id: String, to category: Int) {
         guard var thought = thoughts.first(where: { $0.id == id }) else { return }
-        thought.tagId = category
-        if demo != nil {
+        let previousCategory = thought.tagId
+        // Use the same removal and native scroll animation as completion/deletion.
+        withAnimation(queueAdvanceAnimation) {
+            thought.tagId = category
             chooseNeighbour(removing: id)
-            mutateDemo(thought)
-            if trainingStep == .retagTile { trainingStep = .completeTile }
-        } else {
-            do {
-                try store.update(thought)
-            } catch { self.error = error.localizedDescription; return }
+            if demo != nil {
+                mutateDemo(thought)
+                if trainingStep == .retagTile { advanceTraining(to: .completeTile) }
+            } else {
+                do {
+                    try store.update(thought)
+                    archiveUndo.offerCategoryUndo(for: store.thought(id: thought.id) ?? thought, previousCategoryID: previousCategory)
+                } catch { self.error = error.localizedDescription; return }
+            }
+            showTags = organisingInbox
+            reconcileDemoSelection()
         }
-        showTags = organisingInbox
-        reconcileDemoSelection()
     }
     private func chooseNeighbour(removing id: String) {
         guard selectedID == id, let index = categoryThoughts.firstIndex(where: { $0.id == id }) else { return }
@@ -713,32 +862,39 @@ struct ContentView: View {
     }
     private func archive(_ thought: ThoughtRecord, status: ThoughtRecord.Status) {
         guard demo == nil || (trainingStep == .completeTile && status == .completed) else { return }
-        guard completingThoughtID == nil else { return }
-        if status == .completed && !reduceMotion {
+        guard completingThoughtID == nil, deletingThoughtID == nil else { return }
+        if !reduceMotion {
             stopSpin()
-            withAnimation(.easeIn(duration: 0.6)) { completingThoughtID = thought.id }
+            withAnimation(.easeIn(duration: 0.6)) {
+                if status == .deleted { deletingThoughtID = thought.id }
+                else { completingThoughtID = thought.id }
+            }
             completionTask = Task { @MainActor in
                 do { try await Task.sleep(for: .milliseconds(600)) } catch { return }
                 commitArchive(thought, status: status)
                 completingThoughtID = nil
+                deletingThoughtID = nil
             }
         } else { commitArchive(thought, status: status) }
     }
 
-    private func commitArchive(_ thought: ThoughtRecord, status: ThoughtRecord.Status) {
+    private func commitArchive(_ thought: ThoughtRecord, status: ThoughtRecord.Status, allowsUndo: Bool = true) {
         // Animate the row removal and native scroll selection together so the
         // neighbouring tile visibly settles into the centre after archiving.
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+        withAnimation(queueAdvanceAnimation) {
             chooseNeighbour(removing: thought.id)
             if demo != nil {
                 demo?.removeAll { $0.id == thought.id }
-                if trainingStep == .completeTile { trainingStep = .addThoughtTile }
+                if trainingStep == .completeTile { advanceTraining(to: .addThoughtTile) }
                 reconcileDemoSelection()
             } else {
                 var updated = store.thought(id: thought.id) ?? thought
                 updated.status = status
                 updated.archivedAt = Date()
-                perform { try store.update(updated) }
+                do {
+                    try store.update(updated)
+                    if allowsUndo { archiveUndo.offerUndo(for: store.thought(id: updated.id) ?? updated) }
+                } catch { self.error = error.localizedDescription }
             }
         }
     }
@@ -762,9 +918,9 @@ struct ContentView: View {
         angularVelocity = delta.axis * min(8, delta.angle / dt)
         orientation = (Quaternion.fromVectors(dragStart, point) * dragOrientation).normalized()
         lastDragPoint = point; lastDragTime = now
-        if demo != nil && trainingStep == .spinSphere { trainingStep = .openTagView }
     }
     private func endDrag() {
+        if dragStart != nil, demo != nil, trainingStep == .spinSphere { advanceTraining(to: .openTagView) }
         dragStart = nil
         guard !reduceMotion, angularVelocity.length > 0.04 else { stopSpin(); return }
         spinning = true; lastFrame = 0
@@ -935,7 +1091,7 @@ struct ContentView: View {
     }
     private func removeDuplicates() -> Int {
         let ids = duplicates().flatMap { $0.items.dropFirst().map(\.id) }
-        for id in ids { if let thought = store.thought(id: id) { archive(thought, status: .deleted) } }
+        for id in ids { if let thought = store.thought(id: id) { commitArchive(thought, status: .deleted, allowsUndo: false) } }
         return ids.count
     }
     private func exportCSV() -> Data {
@@ -970,7 +1126,7 @@ struct ContentView: View {
         case "capture":
             addThought()
             updateCaptureText("Bookshop coffee idea")
-        case "full": focused = records.last
+        case "full": pendingFocused = records.last
         default: break
         }
     }
@@ -998,6 +1154,25 @@ struct ContentView: View {
     }
     #endif
 
+    /// Keep the completed instruction visible and prevent repeated actions during the pause.
+    private func advanceTraining(to next: TrainingStep) {
+        guard demo != nil, pendingTrainingStep == nil else { return }
+        pendingTrainingStep = next
+        scheduleTrainingAdvance()
+    }
+
+    private func scheduleTrainingAdvance() {
+        guard !categoryTransitioning, let next = pendingTrainingStep, trainingAdvanceTask == nil else { return }
+        let previous = trainingStep
+        trainingAdvanceTask = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            guard demo != nil, trainingStep == previous, pendingTrainingStep == next else { return }
+            trainingStep = next
+            pendingTrainingStep = nil
+            trainingAdvanceTask = nil
+        }
+    }
+
     private var trainingText: String {
         switch trainingStep {
         case .spinSphere: "This is your BrainDump. Drag the tiles around to explore your thoughts."
@@ -1008,7 +1183,7 @@ struct ContentView: View {
         case .addThoughtTile: "Use the Plus button to create a blank tile in this category."
         case .createFirstTile: keepsTrainingCapture ? "Create your first tile. Type a thought, then tap Done. This tile is yours to keep." : "Create a practice tile. Type a thought, then tap Done."
         case .swipeTags: "Swipe sideways to view all your categories."
-        case .readThought: "Long press a tile to deep view it, then tap Done."
+        case .readThought: "Long press a tile to deep view it, then tap the grey X."
         case .returnHome: "Go to the home page using the Close button in the sidebar."
         case .finish: "Use the Plus button to quickly create many new tiles, then press the brain to categorise them later. Tap Finish Training to begin."
         }
@@ -1025,10 +1200,12 @@ struct ContentView: View {
     }
     private func startTraining() {
         guard demo == nil else { return }
+        trainingAdvanceTask?.cancel(); trainingAdvanceTask = nil; pendingTrainingStep = nil
         stopSpin(); showSettings = false
         cancelCategoryFlight()
         trainingReadPresented = false
         previousTrainingSelection = nil
+        trainingScrollMoved = false
         replayCategory = categoryID; replaySelection = selectedID
         keepsTrainingCapture = !trainingCompleted && store.activeThoughts.isEmpty && !ProcessInfo.processInfo.arguments.contains("--training-fixture")
         trainingCaptureID = nil
@@ -1047,6 +1224,7 @@ struct ContentView: View {
     }
     private func finishTraining() {
         guard demo != nil, trainingStep == .finish else { return }
+        trainingAdvanceTask?.cancel(); trainingAdvanceTask = nil; pendingTrainingStep = nil
         demo = nil; trainingCompleted = true; categoryID = replayCategory; selectedID = replaySelection
         centeredID = selectedID; reconcileSelection(); openPendingNotification()
     }

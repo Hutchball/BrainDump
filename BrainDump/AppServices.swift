@@ -82,6 +82,13 @@ enum Haptics {
         return true
     }
 
+    static func tilePop() {
+        guard isEnabled else { return }
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.prepare()
+        generator.impactOccurred(intensity: 1)
+    }
+
     static func optionTap() {
         guard isEnabled else { return }
         let generator = UIImpactFeedbackGenerator(style: .light)
@@ -98,12 +105,13 @@ enum Haptics {
 
     static func negativeDoubleTap() {
         guard isEnabled else { return }
-        let generator = UIImpactFeedbackGenerator(style: .rigid)
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.prepare()
-        generator.impactOccurred(intensity: 0.55)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        generator.impactOccurred(intensity: 1)
+        generator.prepare()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
             guard isEnabled else { return }
-            generator.impactOccurred(intensity: 0.4)
+            generator.impactOccurred(intensity: 1)
         }
     }
 }

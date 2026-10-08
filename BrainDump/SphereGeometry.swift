@@ -11,6 +11,13 @@ import Darwin
 // MARK: - Math Helper
 
 struct SphereMath {
+    /// Gradual density-based growth. This is a layout factor, never a saved zoom value.
+    static func populationScale(tileCount: Int) -> Double {
+        let count = Double(max(0, tileCount))
+        if count <= 12 { return 0.65 + 0.35 * sqrt(count / 12) }
+        return 1 + 0.55 * (1 - exp(-(count - 12) / 40))
+    }
+
     // Generate evenly distributed points on a sphere using golden angle spiral
     static func generatePoint(index: Int, total: Int) -> Point3D {
         // Handle edge case: when there's only one tile, place it at the center

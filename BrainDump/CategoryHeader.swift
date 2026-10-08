@@ -11,7 +11,17 @@ struct TagFilterListView: View {
             HStack(spacing: 4) {
                 categoryButton("chevron.left", label: "Previous category", delta: -1)
                 let tag = tagManager.getTag(byId: selectedTagId) ?? tagManager.getDefaultTag()
-                Text(selectedTagId == 0 ? "Unsorted" : tag.name)
+                Menu {
+                    ForEach(tagIds, id: \.self) { id in
+                        Button { selectedTagId = id } label: {
+                            let name = id == 0 ? "Unsorted" : (tagManager.getTag(byId: id)?.name ?? "Category")
+                            if id == selectedTagId { Label(name, systemImage: "checkmark") }
+                            else { Text(name) }
+                        }
+                        .accessibilityIdentifier("category-menu-choice-\(id)")
+                    }
+                } label: {
+                    Text(selectedTagId == 0 ? "Unsorted" : tag.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
@@ -21,8 +31,11 @@ struct TagFilterListView: View {
                     .frame(maxWidth: 240)
                     .background(.regularMaterial, in: Capsule())
                     .overlay { Capsule().strokeBorder(tag.uiColor, lineWidth: 2) }
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("thought-category-heading")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Choose category")
+                .accessibilityValue(selectedTagId == 0 ? "Unsorted" : tag.name)
+                .accessibilityIdentifier("thought-category-heading")
                 categoryButton("chevron.right", label: "Next category", delta: 1)
             }
             .padding(.top, 30)

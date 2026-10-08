@@ -215,7 +215,69 @@ class TagManager: ObservableObject {
     }
 
     var tagsInDisplayOrder: [Tag] {
-        defaultTagsInDisplayOrder + tags.filter { !$0.isDefault }
+        let fallback = defaultTagsInDisplayOrder + tags.filter { !$0.isDefault }
+        let positions = Dictionary(uniqueKeysWithValues: fallback.enumerated().map { ($0.element.id, $0.offset) })
+        let categories = ThoughtStore.shared.tags
+        let hasCustomOrder = categories.contains { $0.displayOrder != nil }
+        let saved = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0.displayOrder ?? (hasCustomOrder ? Int.max : (positions[$0.id] ?? Int.max))) })
+        return fallback.sorted {
+            let left = saved[$0.id] ?? Int.max, right = saved[$1.id] ?? Int.max
+            return left == right ? (positions[$0.id] ?? Int.max) < (positions[$1.id] ?? Int.max) : left < right
+        }
+    }
+
+    func rename(_ tag: Tag, to name: String) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, var category = ThoughtStore.shared.tags.first(where: { $0.id == tag.id }) else { return }
+        category.name = clean
+        do { try ThoughtStore.shared.updateCategory(category); loadTags(); saveError = nil }
+        catch { saveError = error.localizedDescription }
+    }
+
+    func moveCategories(from source: IndexSet, to destination: Int, defaults: Bool) {
+        var group = tagsInDisplayOrder.filter { $0.isDefault == defaults }
+        group.move(fromOffsets: source, toOffset: destination)
+        let other = tagsInDisplayOrder.filter { $0.isDefault != defaults }
+        let ordered = defaults ? group + other : other + group
+        let positions = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($0.element.id, $0.offset) })
+        var categories = ThoughtStore.shared.tags
+        for index in categories.indices {
+            if let position = positions[categories[index].id], categories[index].displayOrder != position {
+                categories[index].displayOrder = position
+                categories[index].modifiedAt = Date()
+            }
+        }
+        do { try ThoughtStore.shared.applyCategorySnapshot(categories); loadTags(); saveError = nil }
+        catch { saveError = error.localizedDescription }
+    }
+
+    func resetDefaultCategories() {
+        let originals: [(Int, String, TagColor)] = [
+            (0, "Brain Dump", .grey), (3, "Things to do", .brown),
+            (1, "Movies to watch", .darkBlue), (2, "Books to read", .yellow),
+            (4, "Websites to check", .lightBlue)
+        ]
+        var categories = ThoughtStore.shared.tags
+        for (position, original) in originals.enumerated() {
+            let (id, name, color) = original
+            var category = categories.first { $0.id == id }
+                ?? ThoughtCategory(id: id, name: name, color: color.rawValue, isDefault: true)
+            category.name = name; category.color = color.rawValue
+            category.fillHex = nil; category.borderHex = nil
+            category.displayOrder = position; category.isDefault = true; category.isDeleted = false
+            category.modifiedAt = Date()
+            if let index = categories.firstIndex(where: { $0.id == id }) { categories[index] = category }
+            else { categories.append(category) }
+        }
+        // Keep custom categories and their relative order, after the defaults.
+        for (position, tag) in tagsInDisplayOrder.filter({ !$0.isDefault }).enumerated() {
+            if let index = categories.firstIndex(where: { $0.id == tag.id }) {
+                categories[index].displayOrder = originals.count + position
+                categories[index].modifiedAt = Date()
+            }
+        }
+        do { try ThoughtStore.shared.applyCategorySnapshot(categories); loadTags(); saveError = nil }
+        catch { saveError = error.localizedDescription }
     }
 
     var userTags: [Tag] {

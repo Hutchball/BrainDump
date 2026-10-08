@@ -36,6 +36,8 @@ struct TileView: View {
     var sphereIndex: Int? = nil
     var sphereFlightPosition: CGPoint? = nil
     var isDemo = false
+    var isFocusPresented = false
+    var thoughtAnchorID = ""
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
@@ -46,6 +48,7 @@ struct TileView: View {
     @State private var thumbnail: UIImage?
     @State private var materialised = false
     @State private var completionFlight = false
+    @State private var deletionShrink = false
     private let tileSize: CGFloat = 112
 
     private func textColor(for fill: Color) -> Color {
@@ -116,7 +119,7 @@ struct TileView: View {
     var body: some View {
         let layout = computeLayout()
         let tag = tagManager.getTag(byId: tagId) ?? tagManager.getDefaultTag()
-        let fill = isCompleting ? Color.green : (fillColor ?? tag.uiColor)
+        let fill = isDeleting ? Color.red : (isCompleting ? Color.green : (fillColor ?? tag.uiColor))
         let border = isCompleting ? Color(red: 0.04, green: 0.28, blue: 0.10) : (borderColor ?? tag.uiColor)
         let foreground = textColor(for: fill)
         let size: CGFloat = isFiltered ? (isSelected ? 160 : 144) : tileSize
@@ -179,11 +182,13 @@ struct TileView: View {
         .rotation3DEffect(.degrees(isNewTile && !materialised && !reduceMotion ? -55 : 0),
                           axis: (x: 1, y: 0.3, z: 0), perspective: 0.4)
         .shadow(color: .black.opacity(isSelected ? 0.2 : 0.1), radius: isSelected ? 9 : 4, y: 3)
-        return surface
+        let rendered = surface
+        .anchorPreference(key: ThoughtTileAnchorKey.self, value: .bounds) { [thoughtAnchorID: $0] }
+        .opacity(isFocusPresented ? 0 : 1)
         .blur(radius: layout.edgeBlur)
         .contentShape(RoundedRectangle(cornerRadius: 18))
-        .scaleEffect((isFiltered ? 1 : layout.scale) * (completionFlight && !reduceMotion ? 5 : 1))
-        .opacity(isDeleting || completionFlight || isTagChanging ? 0 : layout.opacity)
+        .scaleEffect((isFiltered ? 1 : layout.scale) * (deletionShrink ? 0.001 : (completionFlight && !reduceMotion ? 5 : 1)))
+        .opacity(deletionShrink || completionFlight || isTagChanging ? 0 : layout.opacity)
         .zIndex(layout.zIndex)
         .modifier(ConditionalPositionModifier(isFiltered: isFiltered, position: layout.position))
         .animation(reduceMotion ? nil : .spring(response: 0.65, dampingFraction: 0.8), value: isSelected)
@@ -194,7 +199,13 @@ struct TileView: View {
                 materialised = true
             }
         }
-        .animation(animation, value: isDeleting)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isDeleting)
+        .animation(reduceMotion ? nil : .easeIn(duration: 0.4), value: deletionShrink)
+        .task(id: isDeleting) {
+            guard isDeleting, !reduceMotion else { deletionShrink = false; return }
+            do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            deletionShrink = true
+        }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isCompleting)
         .animation(reduceMotion ? nil : .easeIn(duration: 0.45), value: completionFlight)
         .task(id: isCompleting) {
@@ -208,7 +219,7 @@ struct TileView: View {
         .onChange(of: isSelected) { _, selected in isFocused = isEditing && selected }
         .onChange(of: isEditing) { _, editing in isFocused = editing && isSelected }
         .onChange(of: focusRequestId) { _, _ in isFocused = isEditing && isSelected }
-        .gesture(
+        return rendered.gesture(
             LongPressGesture(minimumDuration: 0.45, maximumDistance: 12)
                 .exclusively(before: TapGesture())
                 .onEnded { gesture in
@@ -276,5 +287,13 @@ struct CylinderTileRow<Content: View>: View {
         }
         .frame(height: max(184, rowHeight))
         .zIndex(isSelected ? 1000 : 0)
+    }
+}
+
+/// Resolve only the requested tile's bounds when presenting its expanded face.
+struct ThoughtTileAnchorKey: PreferenceKey {
+    static var defaultValue: [String: Anchor<CGRect>] { [:] }
+    static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
     }
 }

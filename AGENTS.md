@@ -118,3 +118,19 @@ Keep Apple Vision Pro excluded from distribution until explicitly revisited and 
 
 - [visionOS development](https://developer.apple.com/visionos/)
 - [Manage Apple Vision Pro availability](https://developer.apple.com/help/app-store-connect/manage-your-apps-availability/manage-availability-of-iphone-and-ipad-apps-on-apple-vision-pro/)
+
+## Category settings interaction
+
+Require Edit mode before renaming existing categories. Show explicit trash buttons for custom categories and use native List reordering within each default/custom section. Preserve stable IDs and saved display order.
+
+- [SwiftUI list reordering](https://developer.apple.com/documentation/swiftui/dynamicviewcontent/onmove(perform:))
+- [SwiftUI EditMode](https://developer.apple.com/documentation/swiftui/editmode)
+
+## Expanded tile interaction
+
+Each accepted dismissal uses the same single heavy impact as opening, respecting the Haptics setting. Ignore repeated dismissal gestures during the transition without additional impacts.
+
+Long press uses a single heavy impact and a finite 180° horizontal flip with enlargement. Exchange preview/full content only at the edge-on midpoint; a second long press, a tap outside the enlarged tile, or the grey X at its bottom centre reverses to the original tile. Taps inside the tile must not dismiss it. Place the trash icon after the Delete label. Keep the enlarged tile square, with a 16-point gap at the constrained screen edges and a maximum side of 620 points. Keep full content centred, attachments in saved order, and overflow scrollable. Reveal Complete and Delete with a brief fade only after opening finishes; reserve their space during the flip. Keep the returning small face visible until dismissal to avoid a full-size flash. Expanded text starts at 24 points and scales with Dynamic Type. Reduce Motion skips the flip and action fade; backgrounding invalidates pending animation completions.
+
+- [SwiftUI 3D rotation](https://developer.apple.com/documentation/swiftui/view/rotation3deffect(_:axis:anchor:anchorz:perspective:))
+- [Impact feedback](https://developer.apple.com/documentation/uikit/uiimpactfeedbackgenerator)

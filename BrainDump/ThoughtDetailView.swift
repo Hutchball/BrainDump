@@ -171,6 +171,9 @@ struct ThoughtDetailView: View {
             draft.text = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let (saved, recovered) = try store.saveEdit(draft, original: original)
             draft = saved
+            if !recovered, original.tagId != saved.tagId {
+                ArchiveUndoController.shared.offerCategoryUndo(for: saved, previousCategoryID: original.tagId)
+            }
             let used = Set(draft.attachments.compactMap(\.filename))
             for filename in unsavedImageFiles where !used.contains(filename) && AttachmentStore.isSafeFilename(filename) && !store.thoughts.contains(where: { $0.attachments.contains(where: { $0.filename == filename }) }) {
                 try? FileManager.default.removeItem(at: store.attachmentDirectory.appendingPathComponent(filename))

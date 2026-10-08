@@ -9,6 +9,28 @@ struct ThoughtStoreTests {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         return (directory, UserDefaults(suiteName: name)!)
     }
+    @Test func categoryNamesAndOrderSurviveReloadAndLegacyDecoding() throws {
+        let legacy = Data(#"{"id":3,"name":"Things to do","color":"yellow","isDefault":true,"modifiedAt":0}"#.utf8)
+        let decoded = try JSONDecoder().decode(ThoughtCategory.self, from: legacy)
+        #expect(decoded.displayOrder == nil)
+        let (directory, defaults) = fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ThoughtStore(directory: directory, defaults: defaults)
+        let thought = try store.capture(text: "Keep category membership")
+        var categories = store.tags
+        for index in categories.indices {
+            categories[index].displayOrder = categories.count - index - 1
+            categories[index].modifiedAt = Date()
+        }
+        let id = try #require(categories.first?.id)
+        categories[0].name = "Renamed category"
+        try store.applyCategorySnapshot(categories)
+        let reloaded = ThoughtStore(directory: directory, defaults: defaults)
+        #expect(reloaded.tags == categories)
+        #expect(reloaded.thought(id: thought.id)?.tagId == thought.tagId)
+        #expect(reloaded.pendingIDs.contains("category:\(id)"))
+    }
+
     @Test func environmentChangeRequeuesAcknowledgedLibraryWithoutChangingThoughts() throws {
         let (directory, defaults) = fixture(); defer { try? FileManager.default.removeItem(at: directory) }
         let store = ThoughtStore(directory: directory, defaults: defaults)
